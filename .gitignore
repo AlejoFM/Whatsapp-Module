@@ -1,0 +1,49 @@
+# Root level ignores
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary folders
+tmp/
+temp/
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# WhatsApp session files (root level)
+sessions/
+*.session
+
+# Database files (root level)
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs (root level)
+logs/
+*.log
