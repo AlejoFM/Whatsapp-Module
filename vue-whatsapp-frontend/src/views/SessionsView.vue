@@ -7,48 +7,12 @@
             <p class="text-gray-600">Crea y gestiona múltiples sesiones de WhatsApp simultáneamente</p>
           </div>
           
-          <!-- Botón de reconexión WebSocket -->
+          <!-- Estado de Socket.IO -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
-              <div class="w-3 h-3 rounded-full" :class="socketService.isConnected() ? 'bg-green-500' : 'bg-red-500'"></div>
-              <span class="text-sm text-gray-600">
-                {{ socketService.isConnected() ? 'Conectado' : 'Desconectado' }}
-              </span>
+              <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+              <span class="text-sm text-gray-600">Socket.IO Activo</span>
             </div>
-            <button
-              @click="reconnectWebSocket"
-              :disabled="socketService.isConnected() || isReconnecting"
-              class="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-w-[120px] justify-center"
-              :title="socketService.isConnected() ? 'WebSocket ya está conectado' : 'Reconectar WebSocket'"
-            >
-              <!-- Spinner de carga -->
-              <svg 
-                v-if="isReconnecting" 
-                class="animate-spin h-4 w-4 text-white" 
-                xmlns="http://www.w3.org/2000/svg" 
-                fill="none" 
-                viewBox="0 0 24 24"
-              >
-                <circle 
-                  class="opacity-25" 
-                  cx="12" 
-                  cy="12" 
-                  r="10" 
-                  stroke="currentColor" 
-                  stroke-width="4"
-                ></circle>
-                <path 
-                  class="opacity-75" 
-                  fill="currentColor" 
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              
-              <!-- Texto del botón -->
-              <span v-if="socketService.isConnected()">Conectado</span>
-              <span v-else-if="isReconnecting">Reconectando...</span>
-              <span v-else>Reconectar</span>
-            </button>
           </div>
         </div>
     </div>
@@ -167,12 +131,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted, onUnmounted } from 'vue'
+import { defineComponent, ref, computed, onMounted, watch } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
 import SessionCard from '../components/SessionCard.vue'
 import QRModal from '../components/QRModal.vue'
-import { socketService } from '../services/socketService'
+// import LaravelEchoService from '../services/laravelEchoService' // DESHABILITADO
 import { WhatsAppSession } from '../types'
 
 export default defineComponent({
@@ -194,56 +158,49 @@ export default defineComponent({
     const currentQRCode = ref('')
     const currentSession = ref<WhatsAppSession | null>(null)
     const isConnecting = ref(false)
-    const isReconnecting = ref(false)
     const successNotification = ref('')
     const showSuccessNotificationVisible = ref(false)
     
-    // Función para mostrar notificación de éxito
-    const showSuccessNotification = (message: string) => {
-      successNotification.value = message
-      showSuccessNotificationVisible.value = true
-      
-      // Ocultar la notificación después de 3 segundos
-      setTimeout(() => {
-        showSuccessNotificationVisible.value = false
-        successNotification.value = ''
-      }, 3000)
-    }
 
     const loading = computed(() => store.state.whatsapp.loading)
     const connectedSessions = computed(() => store.getters['whatsapp/connectedSessions'])
     const disconnectedSessions = computed(() => store.getters['whatsapp/disconnectedSessions'])
+    const sessions = computed(() => store.state.whatsapp.sessions)
+
+    // 🔄 NUEVO: Watcher para detectar cambios en las sesiones
+    watch(sessions, (newSessions) => {
+      if (currentSession.value && showQRModal.value) {
+        const updatedSession = newSessions.find((s: WhatsAppSession) => s.id === currentSession.value?.id)
+        
+        if (updatedSession && updatedSession.isConnected && updatedSession.isAuthenticated) {
+          console.log('✅ Sesión autenticada exitosamente:', updatedSession)
+          
+          // Mostrar notificación de éxito
+          successNotification.value = `¡Sesión ${updatedSession.clientId} conectada exitosamente!`
+          showSuccessNotificationVisible.value = true
+          
+          // Cerrar el modal automáticamente
+          setTimeout(() => {
+            closeQRModal()
+            
+            // Ocultar notificación después de 5 segundos
+            setTimeout(() => {
+              showSuccessNotificationVisible.value = false
+              successNotification.value = ''
+            }, 5000)
+          }, 2000) // Esperar 2 segundos para que el usuario vea la notificación
+          
+          // Refrescar la lista de sesiones
+          store.dispatch('whatsapp/loadSessions')
+        }
+      }
+    }, { deep: true })
 
     onMounted(async () => {
       await store.dispatch('whatsapp/loadSessions')
       
-      // Conectar WebSocket y configurar store
-      socketService.setStore(store)
-      socketService.connect()
-      
-      // Escuchar cambios de estado de sesión para cerrar modal automáticamente
-      socketService.onSessionStatusChanged((session) => {
-        handleSessionStatusChanged(session)
-      })
-    })
-
-    // Escuchar eventos de visibilidad de página para reconectar si es necesario
-    onMounted(() => {
-      const handleVisibilityChange = () => {
-        if (!document.hidden && !socketService.isConnected()) {
-          console.log('🔄 Página visible, reconectando WebSocket...')
-          socketService.reconnect()
-        } else if (!document.hidden && socketService.isConnected()) {
-          console.log('ℹ️ Página visible y WebSocket ya conectado, no es necesario reconectar')
-        }
-      }
-
-      document.addEventListener('visibilitychange', handleVisibilityChange)
-      
-      // Cleanup al desmontar
-      onUnmounted(() => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-      })
+      // 🔄 NUEVO: Usando solo Socket.IO - Laravel Echo deshabilitado
+      console.log('🔌 Socket.IO configurado para recibir eventos automáticamente')
     })
 
     const createNewSession = async () => {
@@ -269,113 +226,37 @@ export default defineComponent({
     const disconnectSession = async (sessionId: string) => {
       try {
         await store.dispatch('whatsapp/disconnectSession', sessionId)
+        
+
       } catch (error) {
         console.error('Error disconnecting session:', error)
       }
     }
 
     const deleteSession = async (sessionId: string) => {
-      // Implementar eliminación de sesión
-      console.log('Delete session:', sessionId)
+      try {
+
+        // TODO: Implementar eliminación de sesión
+        console.log('Delete session:', sessionId)
+      } catch (error) {
+        console.error('Error deleting session:', error)
+      }
     }
 
     const viewConversations = (sessionId: string) => {
+
       router.push(`/chat/${sessionId}`)
     }
 
     const closeQRModal = () => {
+
       showQRModal.value = false
       currentQRCode.value = ''
       currentSession.value = null
       isConnecting.value = false
     }
 
-    // Función para reconectar manualmente el WebSocket
-    const reconnectWebSocket = async () => {
-      if (isReconnecting.value) return // Evitar múltiples reconexiones
-      
-      // Verificar si ya estamos conectados
-      if (socketService.isConnected()) {
-        console.log('ℹ️ WebSocket ya está conectado, no es necesario reconectar')
-        return
-      }
-      
-      console.log('🔄 Reconectando WebSocket manualmente...')
-      isReconnecting.value = true
-      
-      try {
-        await socketService.reconnect()
-        console.log('✅ WebSocket reconectado exitosamente')
-      } catch (error) {
-        console.error('❌ Error reconectando WebSocket:', error)
-      } finally {
-        // Esperar un poco antes de quitar el estado de reconexión
-        setTimeout(() => {
-          isReconnecting.value = false
-        }, 1000)
-      }
-    }
 
-    // Manejar cambios de estado de sesión
-    const handleSessionStatusChanged = (session: WhatsAppSession) => {
-      console.log('🔄 Estado de sesión cambiado:', {
-        sessionId: session.id,
-        clientId: session.clientId,
-        isConnected: session.isConnected,
-        isAuthenticated: session.isAuthenticated,
-        phoneNumber: session.phoneNumber
-      })
-      
-      // Si la sesión actual se conectó exitosamente, cerrar el modal
-      if (currentSession.value && 
-          currentSession.value.id === session.id && 
-          session.isConnected && 
-          session.isAuthenticated) {
-        
-        console.log('✅ Sesión conectada exitosamente, cerrando modal QR')
-        console.log('📱 Detalles de la sesión:', {
-          id: session.id,
-          clientId: session.clientId,
-          phoneNumber: session.phoneNumber
-        })
-        
-        // Cerrar el modal inmediatamente
-        closeQRModal()
-        
-        // Mostrar notificación de éxito
-        showSuccessNotification(`Sesión ${session.clientId} conectada exitosamente`)
-        
-        // Recargar la lista de sesiones para mostrar el estado actualizado
-        store.dispatch('whatsapp/loadSessions').then(() => {
-          console.log('📋 Lista de sesiones actualizada después de conexión exitosa')
-        }).catch(error => {
-          console.error('❌ Error actualizando lista de sesiones:', error)
-        })
-      }
-      
-      // Si la sesión está en proceso de conexión, mostrar estado de conexión
-      if (currentSession.value && 
-          currentSession.value.id === session.id && 
-          session.isConnected && 
-          !session.isAuthenticated) {
-        console.log('🔄 Sesión en proceso de conexión - esperando autenticación')
-        isConnecting.value = true
-      }
-      
-      // Si la sesión se desconectó, actualizar estado
-      if (currentSession.value && 
-          currentSession.value.id === session.id && 
-          !session.isConnected) {
-        console.log('❌ Sesión desconectada')
-        isConnecting.value = false
-        
-        // Si el modal está abierto, cerrarlo
-        if (showQRModal.value) {
-          console.log('🔄 Cerrando modal por desconexión de sesión')
-          closeQRModal()
-        }
-      }
-    }
 
     return {
       newSession,
@@ -386,7 +267,6 @@ export default defineComponent({
       currentQRCode,
       currentSession,
       isConnecting,
-      isReconnecting,
       successNotification,
       showSuccessNotificationVisible,
       createNewSession,
@@ -394,10 +274,7 @@ export default defineComponent({
       disconnectSession,
       deleteSession,
       viewConversations,
-      closeQRModal,
-      handleSessionStatusChanged,
-      reconnectWebSocket,
-      socketService
+      closeQRModal
     }
   }
 })

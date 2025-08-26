@@ -1,6 +1,5 @@
 import { Conversation } from '../types'
 import { whatsAppService } from './whatsAppService'
-import { conversationCache } from './conversationCache'
 
 interface LoadStrategy {
   priority: number
@@ -194,23 +193,12 @@ class IntelligentConversationLoader {
     try {
       console.log(`📱 Cargando capa de contactos (máx: ${maxContacts})`)
       
-      // Intentar obtener del caché primero
-      const cached = conversationCache.getConversations(sessionId)
-      if (cached && cached.length > 0) {
-        const contacts = cached.filter(c => c.isContact).slice(0, maxContacts)
-        if (contacts.length > 0) {
-          console.log(`📦 Contactos obtenidos del caché: ${contacts.length}`)
-          return contacts
-        }
-      }
+
 
       // Si no hay caché, usar el nuevo método de conversaciones de contactos
       const conversations = await whatsAppService.getContactConversations(sessionId, maxContacts, 0)
       
-      // Guardar en caché
-      if (conversations.length > 0) {
-        conversationCache.setConversations(sessionId, conversations)
-      }
+
 
       console.log(`📱 Contactos cargados del backend: ${conversations.length}`)
       return conversations
@@ -334,12 +322,10 @@ class IntelligentConversationLoader {
     try {
       console.log(`🦥 Cargando más conversaciones de forma lazy (batch: ${batchSize})`)
       
-      // Obtener conversaciones que no están en caché
-      const cachedConversations = conversationCache.getConversations(sessionId) || []
-      const cachedIds = new Set(cachedConversations.map(c => c.id))
-      
+
+
       // Cargar desde el backend
-      const offset = cachedConversations.length
+      const offset = 0
 
       const contacts = await whatsAppService.getContacts(sessionId)
       const contactIds = contacts.map(c => c.id)
@@ -379,22 +365,11 @@ class IntelligentConversationLoader {
         updatedAt: new Date()
       }))
 
+
       const allConversations = [...mappedConversations, ...mappedNonContactConversations]
 
-      // Filtrar conversaciones nuevas
-      const trulyNew = allConversations.filter(c => !cachedIds.has(c.id))
-      
-      if (trulyNew.length > 0) {
-        // Agregar al caché existente
-        const allConversations = [...cachedConversations, ...trulyNew]
-        conversationCache.setConversations(sessionId, allConversations)
-        
-        console.log(`🦥 Nuevas conversaciones cargadas: ${trulyNew.length}`)
-        return trulyNew
-      }
-      
       console.log(`🦥 No hay nuevas conversaciones para cargar`)
-      return []
+      return allConversations
 
     } catch (error) {
       console.error('❌ Error en carga lazy:', error)
@@ -412,15 +387,13 @@ class IntelligentConversationLoader {
     averageLoadTime: number
   } {
     const batch = this.loadedBatches.get(sessionId)
-    const cached = conversationCache.getConversations(sessionId) || []
-    
+
     return {
-      totalLoaded: cached.length,
-      contactsCount: cached.filter(c => c.isContact).length,
-      recentCount: cached.filter(c => c.lastMessageTime && 
-        new Date(c.lastMessageTime) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length,
-      unreadCount: cached.filter(c => c.unreadCount > 0).length,
-      cacheHitRate: batch ? 0.8 : 0.2, // Placeholder
+      totalLoaded: 0,
+      contactsCount: 0,
+      recentCount: 0,
+      unreadCount: 0,
+      cacheHitRate: 0, // Placeholder
       averageLoadTime: batch ? Date.now() - batch.loadedAt.getTime() : 0
     }
   }

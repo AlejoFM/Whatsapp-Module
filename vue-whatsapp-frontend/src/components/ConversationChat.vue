@@ -35,50 +35,7 @@
             {{ conversation.isContact ? '📱 Contacto' : '📱 No Contacto' }}
           </span>
           
-          <!-- 🔄 NUEVO: Botón de debug para verificar estado del store -->
-          <button
-            @click="debugStoreState"
-            class="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full hover:bg-purple-200 transition-colors"
-            title="Debug estado del store"
-          >
-            🐛 Debug
-          </button>
-          
-          <!-- 🔄 NUEVO: Botón para forzar sincronización -->
-          <button
-            @click="forceSyncWithStore"
-            class="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full hover:bg-orange-200 transition-colors"
-            title="Forzar sincronización con el store"
-          >
-            🔄 Sync
-          </button>
-          
-          <!-- 🔄 NUEVO: Botón para verificar mutaciones -->
-          <button
-            @click="debugMutations"
-            class="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full hover:bg-red-200 transition-colors"
-            title="Debug mutaciones del store"
-          >
-            🔍 Mutations
-          </button>
-          
-          <!-- 🔄 NUEVO: Botón para verificar sincronización del backend -->
-          <button
-            @click="debugBackendSync"
-            class="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full hover:bg-yellow-200 transition-colors"
-            title="Debug sincronización con backend"
-          >
-            🔗 Backend
-          </button>
-          
-          <!-- 🔄 NUEVO: Botón para sincronización forzada -->
-          <button
-            @click="() => forceSyncMessagesToStore()"
-            class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200 transition-colors"
-            title="Sincronización forzada de mensajes"
-          >
-            🔄 Force Sync
-          </button>
+
         </div>
       </div>
       
@@ -109,13 +66,7 @@
           </button>
         </div>
         
-        <!-- 🔄 NUEVO: Indicador de mensajes nuevos -->
-        <div v-if="hasNewMessages" class="mt-2 text-center">
-          <div class="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full animate-pulse">
-            <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-            Nuevos mensajes recibidos
-          </div>
-        </div>
+
       </div>
     </div>
 
@@ -220,7 +171,7 @@ import { defineComponent, ref, onMounted, watch, computed, onUnmounted } from 'v
 import { useStore } from 'vuex'
 import { Conversation, Message } from '../types'
 import { whatsAppService } from '../services/whatsAppService'
-import { socketService } from '../services/socketService'
+// LaravelEchoService se usa para manejar eventos automáticamente
 
 export default defineComponent({
   name: 'ConversationChat',
@@ -243,7 +194,6 @@ export default defineComponent({
     const isSending = ref(false)
     const searchQuery = ref('')
     const isLoadingMore = ref(false)
-    const hasNewMessages = ref(false)
     let searchTimeout: NodeJS.Timeout | null = null
 
     // Cargar mensajes cuando se monta el componente o cambia la conversación
@@ -256,8 +206,7 @@ export default defineComponent({
         const loadedMessages = await whatsAppService.fetchChatMessages(
           props.sessionId,
           props.conversation.phoneNumber, // Usar phoneNumber como chatId
-          100, // 🔄 IMPORTANTE: Límite de 100 para obtener todos los mensajes disponibles
-          true  // Incluir mensajes propios
+          100 // 🔄 IMPORTANTE: Límite de 100 para obtener todos los mensajes disponibles
         )
         
         // 🔄 NUEVO: Sincronizar mensajes del backend con el store
@@ -372,57 +321,7 @@ export default defineComponent({
       }
     }
 
-    // 🔄 NUEVO: Cargar mensajes con filtros avanzados
-    const loadMessagesAdvanced = async (options: {
-      limit?: number;
-      includeFromMe?: boolean;
-      fromDate?: Date;
-      toDate?: Date;
-      messageType?: string;
-      searchText?: string;
-    } = {}) => {
-      try {
-        isLoadingMessages.value = true
-        console.log(`🔍 Cargando mensajes avanzados para: ${props.conversation.contactName || props.conversation.phoneNumber}`)
-        
-        const loadedMessages = await whatsAppService.fetchChatMessagesAdvanced(
-          props.sessionId,
-          props.conversation.phoneNumber,
-          options
-        )
-        
-        // 🔄 NUEVO: Sincronizar mensajes avanzados con el store
-        if (loadedMessages.length > 0) {
-          console.log(`🔄 Sincronizando ${loadedMessages.length} mensajes avanzados con el store`)
-          
-          loadedMessages.forEach(async (message) => {
-            const conversationId = getConversationId()
-            const existingMessages = store.state.whatsapp.messages[conversationId] || []
-            const messageExists = existingMessages.some((m: Message) => m.id === message.id)
-            
-            if (!messageExists) {
-              console.log(`📥 Agregando mensaje avanzado al store: ${message.id}`)
-              
-              // 🔄 IMPORTANTE: Usar commit directo para evitar problemas de async
-              store.commit('whatsapp/ADD_MESSAGE', {
-                ...message,
-                sessionId: props.sessionId
-              })
-            }
-          })
-          
-          console.log(`✅ Sincronización de mensajes avanzados completada`)
-        }
-        
-        messages.value = loadedMessages
-        console.log(`✅ Mensajes avanzados cargados: ${loadedMessages.length}`)
-        
-      } catch (error) {
-        console.error('❌ Error cargando mensajes avanzados:', error)
-      } finally {
-        isLoadingMessages.value = false
-      }
-    }
+
 
     // 🔄 NUEVO: Buscar mensajes por texto con debounce
     const searchMessages = async (searchText: string) => {
@@ -431,11 +330,9 @@ export default defineComponent({
         return
       }
       
-      await loadMessagesAdvanced({
-        limit: 200, // Aumentar límite para búsquedas
-        searchText: searchText.trim(),
-        includeFromMe: true
-      })
+      // Búsqueda simple en los mensajes ya cargados
+      console.log('🔍 Buscando en mensajes locales:', searchText.trim())
+      await loadMessages() // Por ahora, simplemente recargar todos los mensajes
     }
 
     // 🔄 NUEVO: Búsqueda con debounce para evitar demasiadas llamadas al API
@@ -562,23 +459,7 @@ export default defineComponent({
       // 🔄 NUEVO: Acceder al estado del store de forma más reactiva
       const storeState = store.state.whatsapp
       const storeMessages = storeState.messages[conversationId] || []
-      
-      console.log(`🔍 ConversationChat: Computed storeMessages ejecutado:`, {
-        originalPhone: props.conversation.phoneNumber,
-        normalizedPhone: normalizePhoneNumber(props.conversation.phoneNumber),
-        conversationId,
-        storeMessagesLength: storeMessages.length,
-        storeMessagesIds: storeMessages.map((m: Message) => m.id),
-        storeStateKeys: Object.keys(storeState.messages),
-        // 🔍 DEBUG: Mostrar todos los conversationIds disponibles en el store
-        allConversationIds: Object.keys(storeState.messages),
-        // 🔍 DEBUG: Mostrar mensajes de todas las conversaciones
-        allMessages: Object.entries(storeState.messages).map(([id, msgs]) => ({
-          conversationId: id,
-          messageCount: (msgs as Message[]).length,
-          firstMessage: (msgs as Message[])[0]?.body?.substring(0, 20) || 'N/A'
-        }))
-      })
+
       
       return storeMessages
         .filter((msg: Message) => msg && msg.id)
@@ -605,14 +486,11 @@ export default defineComponent({
         loadMessages()
       }
       
-      // 🔄 NUEVO: Unirse a la sala de WebSocket para mensajes en tiempo real
-      console.log(`🔌 ConversationChat: Intentando unirse a la sala de sesión ${props.sessionId}`)
-      socketService.joinSession(props.sessionId)
-      console.log(`🔌 ConversationChat: Unido a la sala de sesión ${props.sessionId}`)
+      // 🔄 NUEVO: Con Laravel Echo no es necesario unirse manualmente a las salas
+      console.log(`🔌 ConversationChat: Laravel Echo maneja los eventos automáticamente para sesión ${props.sessionId}`)
       
-      // 🔄 NUEVO: Verificar estado del WebSocket
-      console.log(`🔌 ConversationChat: Estado del WebSocket:`, {
-        isConnected: socketService.isConnected(),
+      // 🔄 NUEVO: Verificar estado de Laravel Echo
+      console.log(`🔌 ConversationChat: Laravel Echo configurado para sesión:`, {
         sessionId: props.sessionId
       })
     })
@@ -705,171 +583,7 @@ export default defineComponent({
       }
     }, { deep: true, immediate: true })
 
-    // 🔄 NUEVO: Método para debug del store
-    const debugStoreState = () => {
-      console.log('🐛 Debug del Store (ConversationChat):')
-      console.log('Estado actual del store.whatsapp:')
-      console.log(JSON.stringify(store.state.whatsapp, null, 2))
-      console.log('Mensajes en el store para la conversación actual:')
-      const conversationId = getConversationId()
-      const messagesInStore = store.state.whatsapp.messages[conversationId] || []
-      console.log(JSON.stringify(messagesInStore, null, 2))
-    }
 
-    // 🔄 NUEVO: Método para forzar sincronización con el store
-    const forceSyncWithStore = () => {
-      console.log('🔄 Forzando sincronización con el store para la conversación:', props.conversation.phoneNumber)
-      // Simular un cambio en la conversación para que el watcher de props.conversation se active
-      // Esto forzará que el watcher de storeMessages se ejecute y actualice la lista
-      // Esto es útil cuando hay un problema de sincronización persistente
-      // Por ejemplo, si el store no se actualiza correctamente después de un cambio de conversación
-      // o si hay un error en la carga inicial.
-      // Una forma más robusta sería emitir un evento personalizado desde el padre.
-      // Aquí, simplemente forzamos la carga de mensajes para que el watcher de storeMessages
-      // se active y actualice la lista.
-      loadMessages() 
-    }
-
-    // 🔄 NUEVO: Método para debug de mutaciones del store
-    const debugMutations = () => {
-      console.log('🔍 Debug de Mutaciones del Store (ConversationChat):')
-      console.log('Todas las mutaciones registradas en el store:')
-      console.log(JSON.stringify(store.state.whatsapp.mutations, null, 2))
-      console.log('Última mutación ejecutada:')
-      console.log(JSON.stringify(store.state.whatsapp.lastMutation, null, 2))
-    }
-
-    // 🔄 NUEVO: Método para debug de sincronización con backend
-    const debugBackendSync = async () => {
-      console.log('🔗 Debug de Sincronización con Backend (ConversationChat):')
-      
-      const conversationId = getConversationId()
-      console.log(`🔍 ConversationId actual: ${conversationId}`)
-      
-      // Verificar estado actual del store
-      const currentStoreMessages = store.state.whatsapp.messages[conversationId] || []
-      console.log(`📱 Mensajes actuales en store: ${currentStoreMessages.length}`)
-      
-      // Cargar mensajes del backend para comparar
-      try {
-        console.log('🔄 Cargando mensajes del backend para comparación...')
-        const backendMessages = await whatsAppService.fetchChatMessages(
-          props.sessionId,
-          props.conversation.phoneNumber,
-          100, // 🔄 IMPORTANTE: Límite de 100 para obtener todos los mensajes disponibles
-          true
-        )
-        
-        console.log(`📥 Mensajes del backend: ${backendMessages.length}`)
-        
-        // Comparar mensajes del backend vs store
-        const backendIds = new Set(backendMessages.map((m: Message) => m.id))
-        const storeIds = new Set(currentStoreMessages.map((m: Message) => m.id))
-        
-        const missingInStore = backendMessages.filter((m: Message) => !storeIds.has(m.id))
-        const extraInStore = currentStoreMessages.filter((m: Message) => !backendIds.has(m.id))
-        
-        console.log(`❌ Mensajes del backend que NO están en store: ${missingInStore.length}`)
-        missingInStore.forEach((m: Message) => console.log(`  - ${m.id}: "${m.body?.substring(0, 30)}..."`))
-        
-        console.log(`➕ Mensajes en store que NO están en backend: ${extraInStore.length}`)
-        extraInStore.forEach((m: Message) => console.log(`  - ${m.id}: "${m.body?.substring(0, 30)}..."`))
-        
-        console.log(`✅ Mensajes sincronizados: ${backendMessages.length - missingInStore.length}`)
-        
-        // Mostrar algunos ejemplos de mensajes del backend
-        console.log('📋 Ejemplos de mensajes del backend:')
-        backendMessages.slice(0, 5).forEach((m: Message, i: number) => {
-          console.log(`  ${i + 1}. ${m.id}: "${m.body?.substring(0, 30)}..." (${m.fromMe ? 'Enviado' : 'Recibido'})`)
-        })
-        
-        // 🔄 NUEVO: Intentar sincronización forzada si hay mensajes faltantes
-        if (missingInStore.length > 0) {
-          console.log(`🔄 Intentando sincronización forzada de ${missingInStore.length} mensajes...`)
-          await forceSyncMessagesToStore(backendMessages)
-        }
-        
-      } catch (error) {
-        console.error('❌ Error cargando mensajes del backend para debug:', error)
-      }
-    }
-    
-    // 🔄 NUEVO: Método para sincronización forzada de mensajes al store
-    const forceSyncMessagesToStore = async (messagesToSync?: Message[]) => {
-      try {
-        let messagesToProcess: Message[] = []
-        
-        if (messagesToSync && messagesToSync.length > 0) {
-          // Si se pasan mensajes específicos, usarlos
-          messagesToProcess = messagesToSync
-          console.log(`🔄 Iniciando sincronización forzada de ${messagesToProcess.length} mensajes específicos al store`)
-        } else {
-          // Si no se pasan mensajes, cargar desde el backend
-          console.log(`🔄 Cargando mensajes del backend para sincronización forzada...`)
-          messagesToProcess = await whatsAppService.fetchChatMessages(
-            props.sessionId,
-            props.conversation.phoneNumber,
-            100, // 🔄 IMPORTANTE: Límite de 100 para obtener todos los mensajes disponibles
-            true
-          )
-          console.log(`📥 Mensajes cargados del backend: ${messagesToProcess.length}`)
-        }
-        
-        if (messagesToProcess.length === 0) {
-          console.log(`⚠️ No hay mensajes para sincronizar`)
-          return
-        }
-        
-        const conversationId = getConversationId()
-        console.log(`🔍 ConversationId para sincronización: ${conversationId}`)
-        
-        let successCount = 0
-        let errorCount = 0
-        
-        for (const message of messagesToProcess) {
-          try {
-            // 🔄 IMPORTANTE: Verificar que el mensaje tenga el formato correcto
-            const messageForStore = {
-              ...message,
-              sessionId: props.sessionId,
-              id: message.id,
-              fromMe: message.fromMe,
-              from: message.from,
-              to: message.to,
-              body: message.body || '',
-              type: message.type || 'text',
-              status: message.status || 'delivered',
-              timestamp: message.timestamp ? new Date(message.timestamp) : new Date()
-            }
-            
-            console.log(`📥 Sincronizando mensaje: ${message.id} - "${message.body?.substring(0, 30)}..."`)
-            
-            // 🔄 NUEVO: Usar commit directo en lugar de dispatch para evitar problemas de async
-            store.commit('whatsapp/ADD_MESSAGE', messageForStore)
-            
-            successCount++
-            console.log(`✅ Mensaje sincronizado exitosamente: ${message.id}`)
-            
-          } catch (error) {
-            errorCount++
-            console.error(`❌ Error sincronizando mensaje ${message.id}:`, error)
-          }
-        }
-        
-        console.log(`🎯 Sincronización forzada completada: ${successCount} exitosos, ${errorCount} errores`)
-        
-        // 🔄 NUEVO: Verificar estado final del store
-        const finalMessages = store.state.whatsapp.messages[conversationId] || []
-        console.log(`🔍 Estado final del store: ${finalMessages.length} mensajes`)
-        
-        // 🔄 NUEVO: Forzar actualización del computed
-        messages.value = [...finalMessages]
-        console.log(`✅ Chat local actualizado con ${finalMessages.length} mensajes`)
-        
-      } catch (error) {
-        console.error('❌ Error en sincronización forzada:', error)
-      }
-    }
 
     return {
       messages,
@@ -877,10 +591,8 @@ export default defineComponent({
       isLoadingMessages,
       isSending,
       isLoadingMore,
-      hasNewMessages,
       loadMessages,
       loadMoreMessages,
-      loadMessagesAdvanced,
       searchMessages,
       sendMessage,
       getInitials,
@@ -889,11 +601,6 @@ export default defineComponent({
       searchQuery,
       onSearchInput,
       clearSearch,
-      debugStoreState,
-      forceSyncWithStore,
-      debugMutations,
-      debugBackendSync,
-      forceSyncMessagesToStore,
       storeMessages
     }
   }

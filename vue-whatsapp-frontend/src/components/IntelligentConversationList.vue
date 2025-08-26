@@ -78,35 +78,11 @@
     <!-- 🔄 Botones de control -->
     <div class="control-buttons mb-4 flex flex-wrap gap-2">
       <button
-        @click="detectActiveSession"
-        :disabled="isLoading"
-        class="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50"
-      >
-        🔍 Detectar Sesión
-      </button>
-      
-      <button
         @click="loadContactsOnly"
         :disabled="isLoading"
         class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
       >
-        📱 Solo Contactos
-      </button>
-      
-      <button
-        @click="forceReloadContacts"
-        :disabled="isLoading"
-        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-      >
-        🔄 Forzar Recarga
-      </button>
-      
-      <button
-        @click="testLoadContacts"
-        :disabled="isLoading"
-        class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
-      >
-        🧪 Test Contactos
+        📱 Cargar Contactos
       </button>
       
       <button
@@ -127,45 +103,7 @@
         <span v-else>🔄 Carga Progresiva</span>
       </button>
         
-      <button
-        @click="startIntelligentLoad"
-        :disabled="isLoading"
-        class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
-      >
-        <span v-if="isLoading">🧠 Cargando...</span>
-        <span v-else>🧠 Carga Inteligente</span>
-      </button>
-        
-      <button
-        @click="testNewEndpoints"
-        :disabled="isLoading"
-        class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50"
-      >
-        🧪 Test Endpoints
-      </button>
-      
-      <button
-        @click="loadMoreLazy"
-        :disabled="!canLoadMore || isLoadingMore"
-        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-      >
-        <span v-if="isLoadingMore">🦥 Cargando...</span>
-        <span v-else>🦥 Cargar Más</span>
-      </button>
-      
-      <button
-        @click="refreshCache"
-        class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
-      >
-        🔄 Refrescar
-      </button>
-      
-      <button
-        @click="clearCache"
-        class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-      >
-        🗑️ Limpiar Caché
-      </button>
+
     </div>
 
       <!-- 🔄 Navegación entre tipos de datos -->
@@ -321,13 +259,10 @@
             <div class="text-sm text-gray-500">
               {{ contactChats.length }} chats cargados
             </div>
-            <button
-              v-if="chatPagination.hasMore && !chatPagination.isLoadingMore"
-              @click="loadMoreContactChats"
-              class="px-3 py-1 text-xs bg-purple-600 text-white rounded-md hover:bg-purple-700"
-            >
-              📚 Cargar Más
-            </button>
+            <!-- Botón de cargar más chats deshabilitado temporalmente -->
+            <span class="px-3 py-1 text-xs bg-gray-400 text-gray-600 rounded-md">
+              📚 No disponible
+            </span>
             <div v-if="chatPagination.isLoadingMore" class="text-xs text-purple-600">
               🔄 Cargando...
             </div>
@@ -366,25 +301,7 @@
                 </div>
               </div>
               
-              <div class="flex items-center space-x-2">
-                <button
-                  @click.stop="loadChatMessages(chat.chatId, 2, true)"
-                  :disabled="chatLoadStates[chat.chatId]?.isLoading"
-                  class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                >
-                  <span v-if="chatLoadStates[chat.chatId]?.isLoading">🔄</span>
-                  <span v-else>💬</span>
-                </button>
-                
-                <button
-                  v-if="chatLoadStates[chat.chatId]?.hasMore"
-                  @click.stop="loadMoreChatMessages(chat.chatId, 10)"
-                  :disabled="chatLoadStates[chat.chatId]?.isLoading"
-                  class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                >
-                  📚
-                </button>
-              </div>
+
             </div>
             
             <!-- Mensajes del chat (si están cargados) -->
@@ -437,7 +354,7 @@
           </div>
         </div>
         
-        <div v-if="contactConversations.length > 0" class="conversations-list space-y-2">
+        <div v-if="contactConversations.length > 0" class="conversations-list space-y-2 overflow-y-auto">
           <div
             v-for="conversation in contactConversations"
             :key="conversation.id"
@@ -735,166 +652,9 @@ export default defineComponent({
       }
     }
 
-    // 🔄 NUEVO: Cargar chats de contactos en lotes
-    const loadContactChatsBatch = async (limit: number = 20, offset: number = 0) => {
-      try {
-        console.log('👥 Componente: Cargando lotes de chats de contactos')
-        
-        const chats = await store.dispatch('whatsapp/getContactChatsBatch', {
-          sessionId: props.sessionId,
-          limit,
-          offset
-        })
-        
-        if (offset === 0) {
-          // Primera carga, reemplazar todo
-          contactChats.value = chats
-        } else {
-          // Carga adicional, agregar al final
-          contactChats.value.push(...chats)
-        }
-        
-        // Actualizar estado de paginación
-        chatPagination.value.hasMore = chats.length === limit
-        chatPagination.value.currentPage = Math.floor(offset / limit) + 1
-        
-        console.log('✅ Componente: Chats de contactos cargados:', {
-          nuevos: chats.length,
-          total: contactChats.value.length,
-          hasMore: chatPagination.value.hasMore
-        })
-        
-        return chats
-        
-      } catch (error) {
-        console.error('❌ Error cargando chats de contactos:', error)
-        return []
-      }
-    }
 
-    // 🔄 NUEVO: Cargar más chats de contactos
-    const loadMoreContactChats = async () => {
-      if (!chatPagination.value.hasMore || chatPagination.value.isLoadingMore) {
-        return []
-      }
-      
-      try {
-        chatPagination.value.isLoadingMore = true
-        
-        const offset = contactChats.value.length
-        const limit = 20
-        
-        console.log('📚 Componente: Cargando más chats de contactos')
-        
-        const newChats = await loadContactChatsBatch(limit, offset)
-        
-        return newChats
-        
-      } catch (error) {
-        console.error('❌ Error cargando más chats:', error)
-        return []
-      } finally {
-        chatPagination.value.isLoadingMore = false
-      }
-    }
 
-    // 🔄 NUEVO: Cargar mensajes de un chat específico
-    const loadChatMessages = async (chatId: string, limit: number = 2, includeFromMe: boolean = true) => {
-      try {
-        console.log('💬 Componente: Cargando mensajes del chat:', chatId)
-        
-        // Inicializar estado del chat si no existe
-        if (!chatLoadStates.value[chatId]) {
-          chatLoadStates.value[chatId] = {
-            isLoading: false,
-            hasMore: true,
-            totalLoaded: 0
-          }
-        }
-        
-        chatLoadStates.value[chatId].isLoading = true
-        
-        const messages = await store.dispatch('whatsapp/fetchChatMessages', {
-          sessionId: props.sessionId,
-          chatId,
-          limit,
-          includeFromMe
-        })
-        
-        // Guardar mensajes en el estado local
-        chatMessages.value[chatId] = messages
-        chatLoadStates.value[chatId].totalLoaded = messages.length
-        chatLoadStates.value[chatId].hasMore = messages.length === limit
-        
-        console.log('✅ Componente: Mensajes del chat cargados:', {
-          chatId,
-          messages: messages.length,
-          hasMore: chatLoadStates.value[chatId].hasMore
-        })
-        
-        return messages
-        
-      } catch (error) {
-        console.error('❌ Error cargando mensajes del chat:', error)
-        return []
-      } finally {
-        if (chatLoadStates.value[chatId]) {
-          chatLoadStates.value[chatId].isLoading = false
-        }
-      }
-    }
 
-    // 🔄 NUEVO: Cargar más mensajes de un chat bajo demanda
-    const loadMoreChatMessages = async (chatId: string, additionalLimit: number = 10) => {
-      try {
-        const currentState = chatLoadStates.value[chatId]
-        if (!currentState || !currentState.hasMore || currentState.isLoading) {
-          return { messages: [], hasMore: false, totalLoaded: currentState?.totalLoaded || 0 }
-        }
-        
-        console.log('📚 Componente: Cargando más mensajes del chat:', chatId)
-        
-        currentState.isLoading = true
-        
-        const result = await store.dispatch('whatsapp/loadChatMessagesOnDemand', {
-          sessionId: props.sessionId,
-          chatId,
-          currentLimit: currentState.totalLoaded,
-          additionalLimit
-        })
-        
-        // Agregar nuevos mensajes a los existentes
-        if (chatMessages.value[chatId]) {
-          chatMessages.value[chatId].push(...result.messages)
-        } else {
-          chatMessages.value[chatId] = result.messages
-        }
-        
-        // Actualizar estado del chat
-        chatLoadStates.value[chatId] = {
-          ...currentState,
-          hasMore: result.hasMore,
-          totalLoaded: result.totalLoaded,
-          isLoading: false
-        }
-        
-        console.log('✅ Componente: Mensajes adicionales cargados:', {
-          chatId,
-          nuevos: result.messages.length,
-          total: result.totalLoaded,
-          hasMore: result.hasMore
-        })
-        
-        return result
-        
-      } catch (error) {
-        console.error('❌ Error cargando más mensajes:', error)
-        if (chatLoadStates.value[chatId]) {
-          chatLoadStates.value[chatId].isLoading = false
-        }
-        return { messages: [], hasMore: false, totalLoaded: 0 }
-      }
-    }
 
     // 🔄 NUEVO: Inicializar carga progresiva completa
     const initializeProgressiveLoading = async () => {
@@ -953,75 +713,9 @@ export default defineComponent({
       }
     }
     
-    const startIntelligentLoad = async () => {
-      try {
-        isLoading.value = true
-        loadingMessage.value = '🧠 Iniciando carga inteligente...'
-        
-        console.log('🧠 Componente: Iniciando carga inteligente')
-        
-        // Usar el método existente del store
-        await store.dispatch('whatsapp/loadConversationsIntelligently', props.sessionId)
-        
-        // Obtener las conversaciones del store
-        const storeConversations = store.state.whatsapp.conversations
-        conversations.value = storeConversations || []
-        
-        loadingMessage.value = ''
-        
-      } catch (error) {
-        console.error('❌ Error en carga inteligente:', error)
-        loadingMessage.value = '❌ Error en la carga'
-      } finally {
-        isLoading.value = false
-      }
-    }
 
-    const loadMoreLazy = async () => {
-      if (!canLoadMore.value || isLoadingMore.value) return
-      
-      try {
-        isLoadingMore.value = true
-        await store.dispatch('whatsapp/loadMoreConversations', props.sessionId)
-        
-        // Actualizar la lista local
-        const storeConversations = store.state.whatsapp.conversations
-        conversations.value = storeConversations || []
-        
-      } catch (error) {
-        console.error('❌ Error cargando más conversaciones:', error)
-      } finally {
-        isLoadingMore.value = false
-      }
-    }
 
-    const refreshCache = async () => {
-      try {
-        await store.dispatch('whatsapp/refreshConversationsCache', props.sessionId)
-        
-        // Recargar las conversaciones
-        const storeConversations = store.state.whatsapp.conversations
-        conversations.value = storeConversations || []
-        
-      } catch (error) {
-        console.error('❌ Error refrescando caché:', error)
-      }
-    }
 
-    const clearCache = async () => {
-      try {
-        await store.dispatch('whatsapp/clearConversationsCache', props.sessionId)
-        
-        // Limpiar las listas locales
-        conversations.value = []
-        contacts.value = []
-        contactConversations.value = []
-        nonContactConversations.value = []
-        
-      } catch (error) {
-        console.error('❌ Error limpiando caché:', error)
-      }
-    }
     
     // 🔄 NUEVO: Métodos para navegación y selección
     const setActiveTab = (tab: 'contacts' | 'contactChats' | 'contactConversations' | 'nonContactConversations') => {
@@ -1050,10 +744,7 @@ export default defineComponent({
       console.log('👥 Contacto seleccionado y chat abierto:', contact)
     }
     
-    const selectConversation = (conversation: Conversation) => {
-      selectedConversation.value = conversation
-      console.log('💬 Conversación seleccionada:', conversation)
-    }
+
     
     const openChat = (conversation: Conversation) => {
       activeChat.value = conversation
@@ -1065,138 +756,11 @@ export default defineComponent({
       console.log('🔙 Cerrando chat')
     }
     
-    // 🧪 Método para probar los nuevos endpoints
-    const testNewEndpoints = async () => {
-      try {
-        isLoading.value = true
-        loadingMessage.value = '🧪 Probando nuevos endpoints...'
-        
-        console.log('🧪 Componente: Probando nuevos endpoints')
-        
-        // Test 1: Obtener contactos
-        console.log('🧪 Test 1: Probando endpoint de contactos')
-        const contactsResult = await store.dispatch('whatsapp/getContacts', props.sessionId)
-        console.log('✅ Contactos obtenidos:', contactsResult)
-        
-        // Test 2: Obtener conversaciones de contactos
-        console.log('🧪 Test 2: Probando endpoint de conversaciones de contactos')
-        const contactConversationsResult = await store.dispatch('whatsapp/getContactConversations', props.sessionId)
-        console.log('✅ Conversaciones de contactos obtenidas:', contactConversationsResult)
-        
-        // Test 3: Obtener conversaciones no contactos
-        console.log('🧪 Test 3: Probando endpoint de conversaciones no contactos')
-        const nonContactConversationsResult = await store.dispatch('whatsapp/getNonContactConversations', props.sessionId)
-        console.log('✅ Conversaciones no contactos obtenidas:', nonContactConversationsResult)
-        
-        loadingMessage.value = '✅ Todos los endpoints funcionan correctamente'
-        
-        // Limpiar el mensaje después de 3 segundos
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 3000)
-        
-      } catch (error) {
-        console.error('❌ Error probando endpoints:', error)
-        loadingMessage.value = '❌ Error en los endpoints: ' + (error instanceof Error ? error.message : 'Error desconocido')
-        
-        // Limpiar el mensaje después de 5 segundos
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 5000)
-      } finally {
-        isLoading.value = false
-      }
-    }
 
-    // 🔄 NUEVO: Método para detectar y cambiar a una sesión activa
-    const detectActiveSession = async () => {
-      try {
-        console.log('🔍 Detectando sesión activa...')
-        
-        // Obtener todas las sesiones
-        const sessions = await store.dispatch('whatsapp/loadSessions')
-        console.log('🔍 Sesiones disponibles:', sessions)
-        
-        // Buscar una sesión que esté conectada y tenga contactos
-        for (const session of sessions) {
-          if (session.isConnected && session.isAuthenticated) {
-            console.log('🔍 Probando sesión:', session.id)
-            
-            try {
-              // Probar si esta sesión tiene contactos
-              const contacts = await store.dispatch('whatsapp/getContacts', session.id)
-              console.log('🔍 Sesión', session.id, 'tiene', contacts.length, 'contactos')
-              
-              if (contacts && contacts.length > 0) {
-                console.log('✅ Sesión activa encontrada:', session.id)
-                
-                // Actualizar la sesión actual en el store
-                store.dispatch('whatsapp/setCurrentSession', session)
-                
-                // Actualizar el prop del componente (si es posible)
-                if (props.sessionId !== session.id) {
-                  console.log('🔄 Cambiando de sesión:', props.sessionId, '→', session.id)
-                  // Emitir evento para cambiar la sesión
-                  // emit('session-changed', session.id) // This line was commented out in the original file
-                }
-                
-                return session.id
-              }
-            } catch (error) {
-              console.log('❌ Sesión', session.id, 'no tiene contactos o hay error:', error)
-              continue
-            }
-          }
-        }
-        
-        console.log('❌ No se encontró ninguna sesión activa con contactos')
-        return null
-        
-      } catch (error) {
-        console.error('❌ Error detectando sesión activa:', error)
-        return null
-      }
-    }
 
-    // 🔄 NUEVO: Método para probar la carga de contactos directamente
-    const testLoadContacts = async () => {
-      try {
-        isLoading.value = true
-        loadingMessage.value = '🧪 Probando carga de contactos...'
-        
-        console.log('🧪 Componente: Probando carga de contactos directamente')
-        
-        // Llamar directamente al store
-        const contactsResult = await store.dispatch('whatsapp/getContacts', props.sessionId)
-        console.log('🧪 Resultado de getContacts:', contactsResult)
-        
-        // Asignar directamente a la variable reactiva
-        contacts.value = contactsResult || []
-        console.log('🧪 Contactos asignados a contacts.value:', contacts.value)
-        console.log('🧪 Longitud de contacts.value:', contacts.value.length)
-        
-        // Cambiar a la pestaña de contactos
-        activeTab.value = 'contacts'
-        
-        loadingMessage.value = '✅ Contactos cargados correctamente'
-        
-        // Limpiar el mensaje después de 3 segundos
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 3000)
-        
-      } catch (error) {
-        console.error('❌ Error probando carga de contactos:', error)
-        loadingMessage.value = '❌ Error cargando contactos: ' + (error instanceof Error ? error.message : 'Error desconocido')
-        
-        // Limpiar el mensaje después de 5 segundos
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 5000)
-      } finally {
-        isLoading.value = false
-      }
-    }
+
+
+
 
     // �� NUEVO: Método para cargar solo contactos
     const loadContactsOnly = async () => {
@@ -1253,27 +817,7 @@ export default defineComponent({
       }
     }
 
-    // �� NUEVO: Método para forzar la recarga de contactos
-    const forceReloadContacts = async () => {
-      try {
-        isLoading.value = true
-        loadingMessage.value = '📱 Forzando recarga de contactos...'
-        console.log('📱 Componente: Forzando recarga de contactos')
-        await loadContactsOnly() // Reutilizar la lógica de loadContactsOnly
-        loadingMessage.value = '✅ Contactos forzadamente recargados'
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 3000)
-      } catch (error) {
-        console.error('❌ Error forzando recarga de contactos:', error)
-        loadingMessage.value = '❌ Error forzando recarga: ' + (error instanceof Error ? error.message : 'Error desconocido')
-        setTimeout(() => {
-          loadingMessage.value = ''
-        }, 5000)
-      } finally {
-        isLoading.value = false
-      }
-    }
+
 
     // 🔄 Función para formatear fechas
     const formatDate = (date: string | Date | undefined): string => {
@@ -1302,31 +846,7 @@ export default defineComponent({
 
 
 
-    // 🔄 NUEVO: Método para lazy loading de contactos
-    const loadMoreContacts = async () => {
-      if (!canLoadMoreContacts.value || isLoadingMoreContacts.value) {
-        return
-      }
-      
-      try {
-        console.log('📚 Componente: Cargando más contactos (lazy loading)')
-        
-        const newContacts = await store.dispatch('whatsapp/loadMoreContacts', props.sessionId)
-        
-        if (newContacts && newContacts.length > 0) {
-          // Agregar nuevos contactos a la lista existente
-          contacts.value.push(...newContacts)
-          
-          console.log('✅ Componente: Más contactos cargados:', {
-            nuevos: newContacts.length,
-            total: contacts.value.length
-          })
-        }
-        
-      } catch (error) {
-        console.error('❌ Error cargando más contactos:', error)
-      }
-    }
+
 
     // Lifecycle
     onMounted(async () => {
@@ -1341,8 +861,8 @@ export default defineComponent({
             (entries) => {
               entries.forEach((entry) => {
                 if (entry.isIntersecting && canLoadMoreContacts.value && !isLoadingMoreContacts.value) {
-                  console.log('👁️ Trigger de lazy loading detectado, cargando más contactos...')
-                  loadMoreContacts()
+                  console.log('👁️ Trigger de lazy loading detectado, pero función no implementada')
+                  // TODO: Implementar loadMoreContacts si es necesario
                 }
               })
             },
@@ -1384,25 +904,17 @@ export default defineComponent({
       activeTab, selectedContact, selectedConversation,
       // 🔄 NUEVO: Variable para chat activo
       activeChat,
-      startProgressiveLoad, startIntelligentLoad, loadMoreLazy, refreshCache, clearCache,
+      startProgressiveLoad,
       // 🔄 NUEVO: Métodos para navegación y selección
-      setActiveTab, selectContact, selectConversation, openChat, closeChat,
-      testNewEndpoints,
+      setActiveTab, selectContact, openChat, closeChat,
       formatDate,
       // 🔄 NUEVO: Variables reactivas para el estado de los chats
       contactChats, chatMessages, chatLoadStates, chatPagination,
-      // 🔄 NUEVO: Métodos para cargar chats y mensajes
-      loadContactChatsBatch, loadMoreContactChats, loadChatMessages, loadMoreChatMessages,
       // 🔄 NUEVO: Inicializar carga progresiva completa
       initializeProgressiveLoading,
-      testLoadContacts, // Added testLoadContacts to the return object
-      detectActiveSession, // Added detectActiveSession to the return object
-      loadContactsOnly, // Added loadContactsOnly to the return object
-      forceReloadContacts, // Added forceReloadContacts to the return object
+      loadContactsOnly,
       // 🔄 NUEVO: Propiedades de paginación de contactos
-      canLoadMoreContacts, contactsPaginationInfo, isLoadingMoreContacts,
-      // 🔄 NUEVO: Método para lazy loading de contactos
-      loadMoreContacts
+      canLoadMoreContacts, contactsPaginationInfo, isLoadingMoreContacts
     }
   }
 })
