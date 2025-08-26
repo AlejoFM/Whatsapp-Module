@@ -49,11 +49,12 @@ class WhatsAppMessageReceived implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return [
-            'message_id' => $this->message->id,
+
+            'message_id' => $this->message->message_id,
             'session_id' => $this->message->session_id,
-            'from' => $this->message->from,
-            'to' => $this->message->to,
-            'body' => $this->message->body,
+            'from' => $this->message->from_phone,
+            'to' => $this->message->to_phone,
+            'body' => $this->message->content,
             'type' => $this->message->type,
             'timestamp' => $this->message->timestamp,
             'metadata' => $this->message->metadata,

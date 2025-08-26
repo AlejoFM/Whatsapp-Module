@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class WhatsAppContactController extends Controller
 {
@@ -27,9 +28,24 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/contacts", [
+            $url = "{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/contacts";
+            $params = [
                 'limit' => $validated['limit'] ?? 100,
                 'offset' => $validated['offset'] ?? 0
+            ];
+            
+            Log::info('🔍 Llamando a Node.js', [
+                'url' => $url,
+                'params' => $params,
+                'sessionId' => $sessionId
+            ]);
+            
+            $response = Http::timeout(60)->get($url, $params);
+            
+            Log::info('📡 Respuesta de Node.js', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'headers' => $response->headers()
             ]);
             
             if ($response->successful()) {
@@ -38,7 +54,9 @@ class WhatsAppContactController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error al obtener contactos del servicio de WhatsApp'
+                'message' => 'Error al obtener contactos del servicio de WhatsApp',
+                'node_status' => $response->status(),
+                'node_response' => $response->body()
             ], $response->status());
         } catch (\Exception $e) {
             return response()->json([
@@ -59,7 +77,7 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/contacts", [
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/contacts", [
                 'limit' => $validated['limit'] ?? 100,
                 'offset' => $validated['offset'] ?? 0
             ]);
@@ -91,7 +109,7 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/non-contacts", [
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/non-contacts", [
                 'limit' => $validated['limit'] ?? 100,
                 'offset' => $validated['offset'] ?? 0
             ]);
@@ -123,7 +141,7 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/realtime", [
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/realtime", [
                 'limit' => $validated['limit'] ?? 50,
                 'offset' => $validated['offset'] ?? 0
             ]);
@@ -150,7 +168,7 @@ class WhatsAppContactController extends Controller
     public function conversation(string $sessionId, string $phoneNumber): JsonResponse
     {
         try {
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/{$phoneNumber}");
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/conversations/{$phoneNumber}");
             
             if ($response->successful()) {
                 return response()->json($response->json());
@@ -179,7 +197,7 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/chats/contacts", [
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/chats/contacts", [
                 'limit' => $validated['limit'] ?? 20,
                 'offset' => $validated['offset'] ?? 0
             ]);
@@ -211,7 +229,7 @@ class WhatsAppContactController extends Controller
                 'offset' => 'nullable|integer|min:0'
             ]);
 
-            $response = Http::get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/chats/non-contacts", [
+            $response = Http::timeout(35)->get("{$this->nodeServiceUrl}/api/whatsapp/sessions/{$sessionId}/chats/non-contacts", [
                 'limit' => $validated['limit'] ?? 20,
                 'offset' => $validated['offset'] ?? 0
             ]);

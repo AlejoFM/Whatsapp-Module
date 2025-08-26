@@ -1,7 +1,6 @@
 import { Module } from 'vuex'
 import { Conversation, Message, WhatsAppSession } from '../../types'
 import { whatsAppService } from '../../services/whatsAppService'
-import { intelligentLoader } from '../../services/intelligentConversationLoader'
 import { socketService } from '../../services/socketService'
 
 interface WhatsAppState {
@@ -34,13 +33,7 @@ interface WhatsAppState {
     total: number
     currentConversation: Conversation | null
   }
-  // 🔒 NUEVO: Estado para control de sincronización
-  syncControl: {
-    isActive: boolean
-    queueLength: number
-    lastSyncTime: string | null
-    canStartNewSync: boolean
-  }
+  
 }
 
 const whatsapp: Module<WhatsAppState, unknown> = {
@@ -76,13 +69,7 @@ const whatsapp: Module<WhatsAppState, unknown> = {
       total: 0,
       currentConversation: null
     },
-    // 🔒 Inicializar control de sincronización
-    syncControl: {
-      isActive: false,
-      queueLength: 0,
-      lastSyncTime: null,
-      canStartNewSync: true
-    }
+
   }),
 
   mutations: {
@@ -228,22 +215,7 @@ const whatsapp: Module<WhatsAppState, unknown> = {
         currentConversation: null
       }
     },
-    
-    // 🔒 NUEVO: Mutaciones para control de sincronización
-    SET_SYNC_CONTROL(state, control: Partial<WhatsAppState['syncControl']>) {
-      state.syncControl = { ...state.syncControl, ...control }
-    },
-    
-    UPDATE_SYNC_STATUS(state, { isActive, queueLength, lastSyncTime }: { 
-      isActive: boolean, 
-      queueLength: number, 
-      lastSyncTime: string | null 
-    }) {
-      state.syncControl.isActive = isActive
-      state.syncControl.queueLength = queueLength
-      state.syncControl.lastSyncTime = lastSyncTime
-      state.syncControl.canStartNewSync = !isActive
-    }
+
   },
 
   actions: {
@@ -665,133 +637,6 @@ const whatsapp: Module<WhatsAppState, unknown> = {
       }
     },
 
-    async linkPhoneToSession({ commit }, { phoneNumber, sessionId }: { phoneNumber: string, sessionId: string }) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        console.log(`🔗 Vinculando ${phoneNumber} a sesión ${sessionId}`)
-        const success = await whatsAppService.linkPhoneToSession(phoneNumber, sessionId)
-        
-        if (success) {
-          console.log(`✅ Número vinculado exitosamente`)
-          return true
-        } else {
-          console.log(`❌ No se pudo vincular el número`)
-          return false
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error linking phone to session'
-        commit('SET_ERROR', errorMessage)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
-
-    // Métodos de caché
-    clearConversationCache(_, sessionId: string) {
-      whatsAppService.clearConversationCache(sessionId)
-      console.log(`🗑️ Caché de conversaciones limpiado para sesión ${sessionId}`)
-    },
-
-    getCacheStats() {
-      return whatsAppService.getCacheStats()
-    },
-
-    // 🧠 Carga inteligente de conversaciones
-    async loadConversationsIntelligently({ commit }, sessionId: string) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        console.log('🧠 Store: Iniciando carga inteligente de conversaciones')
-        
-        // Usar el cargador inteligente
-        const result = await intelligentLoader.loadConversationsIntelligently(sessionId, {
-          maxContacts: 50,      // Máximo 50 contactos
-          maxRecent: 30,        // Máximo 30 chats recientes
-          maxUnread: 20,        // Máximo 20 no leídos
-          enableLazyLoading: true // Habilitar carga lazy
-        })
-        
-        // Combinar todas las conversaciones
-        const allConversations = [
-          ...result.contacts,
-          ...result.recent,
-          ...result.unread
-        ]
-        
-        // Filtrar duplicados
-        const filteredConversations = filterDuplicateConversations(allConversations)
-        
-        // Establecer conversaciones en el estado
-        commit('SET_CONVERSATIONS', filteredConversations)
-        
-        // Actualizar paginación
-        commit('SET_CONVERSATIONS_PAGINATION', {
-          hasMore: true, // Siempre puede haber más con carga lazy
-          currentPage: 1,
-          totalLoaded: filteredConversations.length,
-          isLoadingMore: false
-        })
-        
-        console.log('✅ Store: Carga inteligente completada:', {
-          contacts: result.contacts.length,
-          recent: result.recent.length,
-          unread: result.unread.length,
-          total: result.total,
-          loadTime: result.loadTime,
-          filtered: filteredConversations.length
-        })
-        
-        return filteredConversations
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error en carga inteligente'
-        commit('SET_ERROR', errorMessage)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
-
-    // 🔄 NUEVO: Carga progresiva de conversaciones usando los nuevos endpoints
-    async loadConversationsProgressively({ commit }, sessionId: string) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        console.log('🔄 Store: Iniciando carga progresiva de conversaciones')
-        
-        // Usar el nuevo método del servicio de WhatsApp
-        const result = await whatsAppService.loadConversationsProgressive(sessionId, {
-          maxContacts: 100,           // Máximo 100 contactos
-          maxNonContacts: 200,        // Máximo 200 conversaciones no contactos
-          enableParallel: true        // Cargar en paralelo para mayor velocidad
-        })
-        
-        console.log('✅ Store: Carga progresiva completada:', {
-          contacts: result.contacts.length,
-          contactConversations: result.contactConversations.length,
-          nonContactConversations: result.nonContactConversations.length,
-          total: result.total,
-          loadTime: result.loadTime
-        })
-        
-        // Retornar el resultado completo para que el componente lo maneje
-        return result
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error en carga progresiva'
-        commit('SET_ERROR', errorMessage)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
-
-    // 🔄 NUEVO: Métodos individuales para testing y uso directo
     async getContacts({ commit, state }, { sessionId, resetPagination = false }: { sessionId: string, resetPagination?: boolean }) {
       try {
         commit('SET_LOADING', true)
@@ -1004,13 +849,13 @@ const whatsapp: Module<WhatsAppState, unknown> = {
 
 
     // 🔄 NUEVO: Obtener mensajes de un chat específico
-    async fetchChatMessages({ commit }, { sessionId, chatId, limit = 2, includeFromMe = true }: { sessionId: string, chatId: string, limit?: number, includeFromMe?: boolean }) {
+    async fetchChatMessages({ commit }, { sessionId, chatId, limit = 2 }: { sessionId: string, chatId: string, limit?: number }) {
       try {
         commit('SET_LOADING', true)
         commit('SET_ERROR', null)
         
         console.log('💬 Store: Obteniendo mensajes del chat')
-        const messages = await whatsAppService.fetchChatMessages(sessionId, chatId, limit, includeFromMe)
+        const messages = await whatsAppService.fetchChatMessages(sessionId, chatId, limit)
         
         console.log('✅ Store: Mensajes obtenidos:', messages.length)
         return messages
@@ -1045,122 +890,8 @@ const whatsapp: Module<WhatsAppState, unknown> = {
       }
     },
 
-    // 🔄 NUEVO: Métodos para gestión de caché
-    async refreshConversationsCache({ commit }, sessionId: string) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        console.log('🔄 Store: Refrescando caché de conversaciones')
-        
-        // Limpiar caché y recargar
-        whatsAppService.clearConversationCache(sessionId)
-        
-        // Recargar conversaciones
-        const result = await whatsAppService.loadConversationsProgressive(sessionId, {
-          maxContacts: 100,
-          maxNonContacts: 200,
-          enableParallel: true
-        })
-        
-        // Actualizar estado
-        commit('SET_CONVERSATIONS', [...result.contactConversations, ...result.nonContactConversations])
-        
-        console.log('✅ Store: Caché refrescado')
-        return result
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error refrescando caché'
-        commit('SET_ERROR', errorMessage)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
+    
 
-    async clearConversationsCache({ commit }, sessionId: string) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        console.log('🗑️ Store: Limpiando caché de conversaciones')
-        
-        // Limpiar caché
-        whatsAppService.clearConversationCache(sessionId)
-        
-        // Limpiar estado
-        commit('SET_CONVERSATIONS', [])
-        commit('SET_CONVERSATIONS_PAGINATION', {
-          hasMore: true,
-          currentPage: 0,
-          totalLoaded: 0,
-          isLoadingMore: false
-        })
-        
-        console.log('✅ Store: Caché limpiado')
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error limpiando caché'
-        commit('SET_ERROR', errorMessage)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
-
-    // 🦥 Cargar más conversaciones de forma lazy
-    async loadMoreConversationsLazy({ commit, state }, sessionId: string) {
-      if (state.conversationsPagination.isLoadingMore) {
-        return []
-      }
-      
-      try {
-        commit('SET_CONVERSATIONS_PAGINATION', { isLoadingMore: true })
-        
-        console.log('🦥 Store: Cargando más conversaciones de forma lazy')
-        
-        // Usar el cargador inteligente para carga lazy
-        const newConversations = await intelligentLoader.loadMoreConversationsLazy(sessionId, 20)
-        
-        if (newConversations.length > 0) {
-          // Agregar al estado existente
-          commit('APPEND_CONVERSATIONS', newConversations)
-          
-          // Actualizar paginación
-          const newTotal = state.conversationsPagination.totalLoaded + newConversations.length
-          commit('SET_CONVERSATIONS_PAGINATION', {
-            totalLoaded: newTotal,
-            isLoadingMore: false
-          })
-          
-          console.log('✅ Store: Conversaciones lazy cargadas:', {
-            nuevas: newConversations.length,
-            total: newTotal
-          })
-          
-          return newConversations
-        } else {
-          // No hay más conversaciones
-          commit('SET_CONVERSATIONS_PAGINATION', {
-            hasMore: false,
-            isLoadingMore: false
-          })
-          
-          console.log('📭 Store: No hay más conversaciones para cargar')
-          return []
-        }
-        
-      } catch (error) {
-        console.error('❌ Store: Error en carga lazy:', error)
-        commit('SET_CONVERSATIONS_PAGINATION', { isLoadingMore: false })
-        throw error
-      }
-    },
-
-    // 📊 Obtener estadísticas de carga inteligente
-    getIntelligentLoadStats(_, sessionId: string) {
-      return intelligentLoader.getLoadStats(sessionId)
-    },
 
     // WebSocket event handlers
     handleMessageReceived({ commit, state }, message: Message) {
@@ -1325,82 +1056,7 @@ const whatsapp: Module<WhatsAppState, unknown> = {
       }
     },
 
-    // Acción para forzar sincronización completa
-    async forceFullSync({ commit }, sessionId: string) {
-      try {
-        commit('SET_LOADING', true)
-        commit('SET_ERROR', null)
-        
-        // Llamar al endpoint de sincronización completa
-        const response = await fetch(`/api/whatsapp/sessions/${sessionId}/force-full-sync`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`)
-        }
-        
-        const result = await response.json()
-        console.log('✅ Sincronización completa iniciada:', result)
-        
-        return result
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error en sincronización completa'
-        commit('SET_ERROR', errorMessage)
-        console.error('❌ Error en sincronización completa:', error)
-        throw error
-      } finally {
-        commit('SET_LOADING', false)
-      }
-    },
-    
-    // 🔒 NUEVO: Consultar estado de sincronización
-    async getSyncStatus({ commit }, sessionId: string) {
-      try {
-        // Llamar al endpoint para obtener estadísticas de sincronización
-        const response = await fetch(`/api/whatsapp/sessions/${sessionId}/sync-status`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`)
-        }
-        
-        const syncStats = await response.json()
-        console.log('🔍 Estado de sincronización obtenido:', syncStats)
-        
-        // Actualizar el estado del store
-        commit('UPDATE_SYNC_STATUS', {
-          isActive: syncStats.isActive,
-          queueLength: syncStats.queueLength,
-          lastSyncTime: syncStats.lastSyncTime
-        })
-        
-        return syncStats
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Error consultando estado de sincronización'
-        commit('SET_ERROR', errorMessage)
-        console.error('❌ Error consultando estado de sincronización:', error)
-        throw error
-      }
-    },
-    
-    // 🔒 NUEVO: Verificar si se puede iniciar sincronización
-    async checkSyncAvailability({ }, sessionId: string) {
-      try {
-        await this.dispatch('whatsapp/getSyncStatus', sessionId)
-        return true
-      } catch (error) {
-        console.error('❌ Error verificando disponibilidad de sincronización:', error)
-        return false
-      }
-    }
+
   },
 
   getters: {
@@ -1453,11 +1109,6 @@ const whatsapp: Module<WhatsAppState, unknown> = {
     canLoadMoreContacts: (state) => state.contactsPagination.hasMore && !state.contactsPagination.isLoadingMore,
     contactsPaginationInfo: (state) => state.contactsPagination,
     
-    // 🔒 NUEVO: Getters para control de sincronización
-    syncControlInfo: (state) => state.syncControl,
-    canStartSync: (state) => state.syncControl.canStartNewSync,
-    syncQueueLength: (state) => state.syncControl.queueLength,
-    lastSyncTime: (state) => state.syncControl.lastSyncTime
   }
 }
 

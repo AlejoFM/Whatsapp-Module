@@ -1,9 +1,8 @@
 import axios from 'axios'
 import { WhatsAppSession, Conversation, Message, CreateSessionRequest, SendMessageRequest, ApiResponse } from '../types'
-import { conversationCache } from './conversationCache'
 import { smartAuthService } from './smartAuthService'
 
-const API_BASE_URL = process.env.VUE_APP_API_URL || 'http://localhost:3000/api'
+const API_BASE_URL = process.env.VUE_APP_API_URL || 'http://localhost:8000/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -50,7 +49,7 @@ export const whatsAppService = {
     
     try {
       // Usar el nuevo endpoint fetchChatMessages en lugar del legacy
-      const messages = await this.fetchChatMessages(sessionId, phoneNumber, limit, true)
+      const messages = await this.fetchChatMessages(sessionId, phoneNumber, limit)
       
       // Aplicar offset si es necesario (para compatibilidad con el método anterior)
       if (offset > 0 && messages.length > offset) {
@@ -97,11 +96,6 @@ export const whatsAppService = {
       const conversations = response.data.data
       console.log(`✅ Conversaciones de contactos obtenidas: ${conversations.length}`)
       
-      // Guardar en caché para futuras consultas
-      if (conversations.length > 0) {
-        conversationCache.setConversations(sessionId, conversations)
-      }
-      
       return conversations
     } catch (error) {
       console.error('❌ Error obteniendo conversaciones de contactos:', error)
@@ -122,11 +116,6 @@ export const whatsAppService = {
       const conversations = response.data.data
       console.log(`✅ Conversaciones no contactos obtenidas: ${conversations.length}`)
       
-      // Guardar en caché para futuras consultas
-      if (conversations.length > 0) {
-        conversationCache.setConversations(sessionId, conversations)
-      }
-      
       return conversations
     } catch (error) {
       console.error('❌ Error obteniendo conversaciones no contactos:', error)
@@ -136,35 +125,11 @@ export const whatsAppService = {
 
   // Conversaciones (método legacy - mantenido para compatibilidad)
   async getConversations(sessionId: string, limit: number = 200, offset: number = 0): Promise<Conversation[]> {
-    // Intentar obtener del caché primero
-    const cached = conversationCache.getConversations(sessionId)
-    if (cached && cached.length > 0) {
-      console.log(`📦 Conversaciones obtenidas del caché: ${cached.length}`)
-      
-      // Aplicar paginación al caché
-      const start = offset
-      const end = offset + limit
-      const paginatedConversations = cached.slice(start, end)
-      
-      // Actualizar timestamp de sincronización
-      conversationCache.updateLastSync(sessionId)
-      
-      return paginatedConversations
-    }
-
-    // Si no hay caché, hacer petición al backend
-    console.log(`🌐 Obteniendo conversaciones del backend para sesión ${sessionId}`)
     const response = await api.get<ApiResponse<Conversation[]>>(`/whatsapp/sessions/${sessionId}/conversations`, {
       params: { limit, offset }
     })
     
     const conversations = response.data.data
-    
-    // Guardar en caché para futuras consultas
-    if (conversations.length > 0) {
-      conversationCache.setConversations(sessionId, conversations)
-      console.log(`💾 Conversaciones guardadas en caché: ${conversations.length}`)
-    }
     
     return conversations
   },
@@ -175,6 +140,7 @@ export const whatsAppService = {
     })
     return response.data.data
   },
+
 
   async getConversation(sessionId: string, phoneNumber: string): Promise<Conversation> {
     const response = await api.get<ApiResponse<Conversation>>(`/whatsapp/sessions/${sessionId}/conversations/${phoneNumber}`)
@@ -323,13 +289,13 @@ export const whatsAppService = {
   },
 
   // 🔄 NUEVO: Obtener mensajes de un chat específico
-  async fetchChatMessages(sessionId: string, chatId: string, limit: number = 50, includeFromMe: boolean = true): Promise<Message[]> {
-    console.log(`💬 Obteniendo mensajes del chat ${chatId}: limit=${limit}, includeFromMe=${includeFromMe}`)
+  async fetchChatMessages(sessionId: string, chatId: string, limit: number = 50): Promise<Message[]> {
+    console.log(`💬 Obteniendo mensajes del chat ${chatId}: limit=${limit}`)
     
     try {
       const response = await api.get<ApiResponse<Message[]>>(
         `/whatsapp/sessions/${sessionId}/chats/${chatId}/messages`,
-        { params: { limit, includeFromMe } }
+        { params: { limit } }
       )
       
       const messages = response.data.data
@@ -430,12 +396,4 @@ export const whatsAppService = {
     return smartAuthService.linkPhoneToSession(phoneNumber, sessionId)
   },
 
-  // Métodos de caché
-  clearConversationCache(sessionId: string): void {
-    conversationCache.clearSession(sessionId)
-  },
-
-  getCacheStats() {
-    return conversationCache.getCacheStats()
-  }
 }

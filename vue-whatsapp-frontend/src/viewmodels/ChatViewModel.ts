@@ -637,11 +637,10 @@ export class ChatViewModel {
           contactName: this.selectedConversation.value.contactName
         })
         
-        // 🔄 IMPORTANTE: Usar el mismo patrón que loadMessages() para sincronizar con el store
         const loadedMessages = await this.store.dispatch('whatsapp/fetchChatMessages', {
           sessionId: this.sessionId,
           chatId: this.selectedConversation.value.phoneNumber,
-          limit: 100, // 🔄 IMPORTANTE: Límite de 100 para obtener todos los mensajes disponibles
+          limit: 100,
           includeFromMe: true
         })
         

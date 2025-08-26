@@ -115,23 +115,7 @@
         <div class="w-1/3 border-r border-gray-200 bg-gray-50 flex flex-col">
           <!-- Header de la sidebar -->
           <div class="p-4 flex-shrink-0 h-full">
-            <!-- Notificación de nueva conversación -->
-            <div 
-              v-if="showNewConversationNotification" 
-              class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded animate-bounce"
-            >
-              <div class="flex items-center justify-between">
-                <span class="flex items-center gap-2">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                  </svg>
-                  ¡Nueva conversación detectada!
-                </span>
-                <button @click="hideNotification" class="text-green-700 hover:text-green-900">
-                  ×
-                </button>
-              </div>
-            </div>
+            
             
             <div class="mb-4">
               <input
@@ -294,7 +278,7 @@
             </div>
 
             <!-- Pestaña de Conversaciones de Contactos -->
-            <div v-if="activeTab === 'contactConversations'" class="space-y-2">
+            <div v-if="activeTab === 'contactConversations'" class="h-2">
               <div class="mb-4 p-3 bg-blue-100 border border-blue-300 rounded text-xs">
                 <strong>💬 Conversaciones de Contactos:</strong> {{ contactConversations.length }} encontradas
               </div>
@@ -417,7 +401,7 @@ import { useStore } from 'vuex'
 import { ChatViewModel } from '../viewmodels/ChatViewModel'
 import ConversationChat from '../components/ConversationChat.vue'
 import { ConversationModel } from '../models/Conversation'
-import { socketService } from '../services/socketService'
+// LaravelEchoService se usa para manejar eventos automáticamente
 
 export default defineComponent({
   name: 'ChatView',
@@ -514,6 +498,11 @@ export default defineComponent({
     
     // 🔄 NUEVO: Función para cerrar el chat
     const closeChat = () => {
+      // 🔄 NUEVO: Con Laravel Echo no es necesario salir manualmente de las salas
+      if (props.sessionId) {
+        console.log('🔌 ChatView: Cerrando chat, Laravel Echo maneja los eventos automáticamente')
+      }
+      
       selectedConversation.value = null
       console.log('🔙 Chat cerrado')
     }
@@ -546,15 +535,19 @@ export default defineComponent({
 
 
     onMounted(async () => {
-      // 🔄 NUEVO: Inicializar WebSocket para mensajes en tiempo real
-      socketService.connect()
-      console.log('🔌 ChatView: WebSocket inicializado para mensajes en tiempo real')
+      // 🔄 NUEVO: Laravel Echo se inicializa automáticamente para mensajes en tiempo real
+      console.log('🔌 ChatView: Laravel Echo configurado para mensajes en tiempo real')
+      
+      // 🔄 NUEVO: Con Laravel Echo no es necesario unirse manualmente a las salas
+      if (props.sessionId) {
+        console.log('🔌 ChatView: Laravel Echo maneja los eventos automáticamente para sesión:', props.sessionId)
+      }
       
       await viewModel.initialize()
     })
 
-    // Escuchar cambios en las conversaciones para mostrar notificaciones
-    watch(conversations, (newConversations, oldConversations) => {
+    // Escuchar cambios en las conversaciones para mostrar notificaciones | Por implementar
+    watch(conversations, (newConversations) => {
       if (!newConversations || newConversations.length === 0) return
       
       if (props.phoneNumber && !selectedConversation.value) {
@@ -566,15 +559,17 @@ export default defineComponent({
         }
       }
 
-      // Mostrar notificación si hay nuevas conversaciones
-      if (oldConversations && newConversations.length > oldConversations.length) {
-        showNotification('¡Nueva conversación detectada!')
-      }
+
     }, { deep: false })
 
     // Cleanup al desmontar
     onMounted(() => {
       return () => {
+        // 🔄 NUEVO: Con Laravel Echo no es necesario salir manualmente de las salas
+        if (props.sessionId) {
+          console.log('🔌 ChatView: Desmontando componente, Laravel Echo maneja los eventos automáticamente')
+        }
+        
         cleanup()
       }
     })
@@ -785,7 +780,6 @@ export default defineComponent({
 @media (max-width: 640px) {
   .sort-controls .flex {
     flex-direction: column;
-    space-y: 2px;
   }
   
   .sort-controls button {

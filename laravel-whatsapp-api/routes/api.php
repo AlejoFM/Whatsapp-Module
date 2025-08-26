@@ -6,6 +6,7 @@ use App\Http\Controllers\WhatsAppBroadcastController;
 use App\Http\Controllers\Api\V1\WhatsAppSessionController;
 use App\Http\Controllers\Api\V1\WhatsAppMessageController;
 use App\Http\Controllers\Api\V1\WhatsAppContactController;
+use App\Http\Controllers\Api\V1\WhatsAppBroadcastController as ApiWhatsAppBroadcastController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,4 +66,9 @@ Route::prefix('whatsapp')->group(function () {
     Route::post('sessions/{sessionId}/sync/progressive/continue', [WhatsAppSessionController::class, 'continueProgressiveSync']);
     Route::get('sessions/{sessionId}/sync-status', [WhatsAppSessionController::class, 'getSyncStatus']);
     Route::post('sessions/{sessionId}/force-full-sync', [WhatsAppSessionController::class, 'forceFullSync']);
+    
+    // Broadcasting y envío masivo
+    Route::post('sessions/{sessionId}/broadcast/send-bulk', [ApiWhatsAppBroadcastController::class, 'sendBulkMessage']);
+    Route::get('sessions/{sessionId}/broadcast/phone-numbers', [ApiWhatsAppBroadcastController::class, 'getConversationPhoneNumbers']);
+    Route::get('sessions/{sessionId}/broadcast/stats', [ApiWhatsAppBroadcastController::class, 'getConversationStats']);
 });

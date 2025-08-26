@@ -18,11 +18,9 @@ class SocketService {
 
   connect() {
     if (this.socket) {
-      console.log('🔌 SocketService: Ya conectado, saltando conexión');
       return
     }
 
-    console.log('🔌 SocketService: Iniciando conexión a:', SOCKET_URL);
     this.socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -32,7 +30,6 @@ class SocketService {
     })
 
     this.setupEventHandlers()
-    console.log('🔌 SocketService: Socket creado y event handlers configurados');
   }
 
   disconnect() {
@@ -44,10 +41,9 @@ class SocketService {
 
   joinSession(sessionId: string) {
     if (this.socket) {
-      console.log('🔌 Frontend: Uniéndose a sala de sesión', { sessionId });
       this.socket.emit('join-session', { sessionId })
     } else {
-      console.warn('⚠️ Frontend: Socket no disponible para joinSession');
+      console.warn('⚠️ Socket no disponible para joinSession');
     }
   }
 
@@ -84,29 +80,14 @@ class SocketService {
     })
 
     this.socket.on('message-received', (message: Message) => {
-      console.log('📨 Frontend: Evento message-received recibido', {
-        messageId: message.id,
-        from: message.from,
-        body: message.body?.substring(0, 50) + '...',
-        sessionId: message.sessionId
-      });
-      
-      console.log('🔍 Frontend: Estado del store:', {
-        storeExists: !!this.store,
-        storeType: typeof this.store,
-        storeMethods: this.store ? Object.keys(this.store) : 'N/A'
-      });
-      
       if (this.store) {
-        console.log('📤 Frontend: Despachando handleMessageReceived al store');
         try {
           this.store.dispatch('whatsapp/handleMessageReceived', message)
-          console.log('✅ Frontend: handleMessageReceived despachado exitosamente');
         } catch (error) {
-          console.error('❌ Frontend: Error al despachar handleMessageReceived:', error);
+          console.error('❌ Error al despachar handleMessageReceived:', error);
         }
       } else {
-        console.warn('⚠️ Frontend: Store no disponible para message-received');
+        console.warn('⚠️ Store no disponible para message-received');
       }
     })
 
@@ -153,14 +134,7 @@ class SocketService {
   }
 
   setStore(store: Store<WhatsAppState>) {
-    console.log('🔌 SocketService: Conectando store:', {
-      storeExists: !!store,
-      storeType: typeof store,
-      storeMethods: store ? Object.keys(store) : 'N/A',
-      storeState: store ? Object.keys(store.state || {}) : 'N/A'
-    });
     this.store = store
-    console.log('✅ SocketService: Store conectado exitosamente');
   }
 
   isConnected(): boolean {
