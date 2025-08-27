@@ -1,5 +1,5 @@
 import { WhatsAppSession, WhatsAppSessionCreate } from '../entities/WhatsAppSession';
-import { Message, MessageCreate } from '../entities/Message';
+import { Message } from '../entities/Message';
 import { Conversation } from '../entities/Conversation';
 
 export interface IWhatsAppService {
