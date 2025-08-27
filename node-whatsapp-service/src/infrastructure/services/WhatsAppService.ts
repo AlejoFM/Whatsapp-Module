@@ -433,7 +433,7 @@ export class WhatsAppService implements IWhatsAppService {
     // Crear mensaje en el repositorio
     const messageData: MessageCreate = {
       sessionId,
-      fromMe: false,
+      fromMe: true,
       from: session.phoneNumber,
       to,
       body,
