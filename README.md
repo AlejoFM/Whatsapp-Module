@@ -506,13 +506,7 @@ Para soporte técnico o preguntas sobre el proyecto:
 - [ ] **Envío de archivos multimedia** - Imágenes, videos, documentos
 - [ ] **Base de datos persistente** - PostgreSQL/MySQL para historial
 - [ ] **Sistema de notificaciones push** - Push notifications web
-- [ ] **Dashboard de analytics** - Métricas y estadísticas de uso
-- [ ] **Sistema de webhooks** - Eventos hacia servicios externos
-- [ ] **Autenticación JWT** - Sistema de usuarios y permisos
-- [ ] **Logs centralizados** - Sistema de auditoría completo
-- [ ] **Tests automatizados** - Unit tests e integration tests
 - [ ] **Docker containerization** - Despliegue containerizado
-- [ ] **CI/CD pipeline** - Integración y despliegue continuo
 
 ---
 

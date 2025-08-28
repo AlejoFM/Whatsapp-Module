@@ -92,13 +92,13 @@ class WhatsAppServer {
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
     // Logging de requests
-    this.app.use((req, res, next) => {
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    this.app.use((_req, _res, next) => {
+      console.log(`${new Date().toISOString()} - ${_req.method} ${_req.path}`);
       next();
     });
     
     // Health check endpoint (sin CORS para debugging)
-    this.app.get('/health', (req, res) => {
+    this.app.get('/health', (_req, res) => {
       res.status(200).json({
         status: 'OK',
         timestamp: new Date().toISOString(),
@@ -156,7 +156,7 @@ class WhatsAppServer {
     new WebSocketService(this.server, whatsAppService);
 
     // Ruta de health check
-    this.app.get('/health', (req, res) => {
+    this.app.get('/health', (_req, res) => {
       res.status(200).json({
         status: 'OK',
         timestamp: new Date().toISOString(),
@@ -166,7 +166,7 @@ class WhatsAppServer {
     });
 
     // Ruta raíz
-    this.app.get('/', (req, res) => {
+    this.app.get('/', (_req, res) => {
       res.status(200).json({
         message: 'WhatsApp Service API',
         version: '1.0.0',
@@ -190,7 +190,7 @@ class WhatsAppServer {
 
   private setupErrorHandling(): void {
     // Middleware para manejo de errores
-    this.app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    this.app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       console.error('Error:', error);
       
       res.status(error.status || 500).json({

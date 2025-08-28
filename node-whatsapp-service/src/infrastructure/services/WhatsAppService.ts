@@ -45,6 +45,9 @@ export class WhatsAppService implements IWhatsAppService {
       throw new Error('Session already connected');
     }
 
+    // 🔧 Limpiar sesión anterior para evitar conflictos
+    await this.cleanupPreviousSession(session.clientId);
+
     // Crear cliente de WhatsApp
     const client = new Client({
       authStrategy: new LocalAuth({
@@ -52,6 +55,7 @@ export class WhatsAppService implements IWhatsAppService {
         dataPath: `./sessions/${session.clientId}`
       }),
       puppeteer: {
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || this.getPuppeteerExecutablePath(),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -77,6 +81,34 @@ export class WhatsAppService implements IWhatsAppService {
           '--no-default-browser-check',
           '--safebrowsing-disable-auto-update',
           '--disable-features=TranslateUI',
+          '--disable-background-networking',
+          '--disable-component-extensions-with-background-pages',
+          '--disable-background-mode',
+          '--disable-client-side-phishing-detection',
+          '--disable-hang-monitor',
+          '--disable-prompt-on-repost',
+          '--disable-domain-reliability',
+          '--disable-component-update',
+          '--disable-features=AudioServiceOutOfProcess',
+          '--disable-software-rasterizer',
+          '--disable-threaded-animation',
+          '--disable-threaded-scrolling',
+          '--disable-in-process-stack-traces',
+          '--disable-histogram-customizer',
+          '--disable-gl-extensions',
+          '--disable-composited-antialiasing',
+          '--disable-canvas-aa',
+          '--disable-3d-apis',
+          '--disable-accelerated-layers',
+          '--disable-accelerated-plugins',
+          '--disable-accelerated-video',
+          '--disable-accelerated-video-decode',
+          '--disable-gpu-sandbox',
+          // 🔧 Argumentos específicos para Windows
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
           '--disable-background-networking',
           '--disable-component-extensions-with-background-pages',
           '--disable-background-mode',
@@ -396,7 +428,7 @@ export class WhatsAppService implements IWhatsAppService {
 
     // Enviar mensaje a través de wwebjs
     const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
-    const sentMessage = await client.sendMessage(chatId, body);
+    await client.sendMessage(chatId, body);
 
     // Crear mensaje en el repositorio
     const messageData: MessageCreate = {
@@ -793,44 +825,26 @@ export class WhatsAppService implements IWhatsAppService {
         totalContacts: validContacts.length
       });
       
-      // 2️⃣ ✅ CORRECTO: Obtener solo chats de contactos específicos (SIN getChats())
       const contactChats: Array<{
         chat: any;
         contact: any;
       }> = [];
       
-      // Procesar contactos en lotes para evitar sobrecarga
-      const batchSize = 10;
-      for (let i = 0; i < validContacts.length; i += batchSize) {
-        const batch = validContacts.slice(i, i + batchSize);
-        
-        // Procesar lote actual en paralelo
-        const batchPromises = batch.map(async (contact) => {
-          try {
-            // 🎯 Obtener solo el chat específico de este contacto
-            const chat = await client.getChatById(contact.id._serialized);
-            
-            if (chat && !chat.isGroup && !chat.archived) {
-              return { chat, contact };
-            }
-            return null;
-          } catch (error) {
-            logger.debug(`⚠️ Error obteniendo chat para ${contact.id._serialized}: ${error instanceof Error ? error.message : 'Error desconocido'}`, { 
-              method: 'getContactChatsBatch', 
-              sessionId,
-              contactId: contact.id._serialized
-            });
-            return null;
-          }
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        const validResults = batchResults.filter(result => result !== null);
-        contactChats.push(...validResults);
-        
-        // Pausa entre lotes para evitar sobrecarga
-        if (i + batchSize < validContacts.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+      const allChats = await client.getChats();
+      const contactNumbers = new Set(validContacts.map(c => c.id._serialized));
+      
+      // Filtrar solo chats que corresponden a contactos
+      const relevantChats = allChats.filter(chat => 
+        !chat.isGroup && 
+        !chat.archived && 
+        contactNumbers.has(chat.id._serialized)
+      );
+      
+      // Mapear chats con sus contactos correspondientes
+      for (const chat of relevantChats) {
+        const contact = validContacts.find(c => c.id._serialized === chat.id._serialized);
+        if (contact) {
+          contactChats.push({ chat, contact });
         }
       }
       
@@ -1027,23 +1041,20 @@ export class WhatsAppService implements IWhatsAppService {
   async fetchChatMessages(
     sessionId: string, 
     chatId: string, 
-    limit: number = 2, 
-    includeFromMe: boolean = true
+    limit: number = 2
   ): Promise<Message[]> {
     console.log(`🔍 [DEBUG] fetchChatMessages iniciado:`, {
       sessionId,
       chatId,
       limit,
-      includeFromMe,
       timestamp: new Date().toISOString()
     });
     
-    logger.info(`💬 Obteniendo mensajes del chat: limit=${limit}, includeFromMe=${includeFromMe}`, { 
+    logger.info(`💬 Obteniendo mensajes del chat: limit=${limit}`, { 
       method: 'fetchChatMessages', 
       sessionId,
       chatId,
-      limit,
-      includeFromMe
+      limit
     });
     
     const client = this.clients.get(sessionId);
@@ -1113,9 +1124,7 @@ export class WhatsAppService implements IWhatsAppService {
         limit: Math.min(limit, 100) // Limitar a máximo 100 mensajes por seguridad
       };
       
-      if (!includeFromMe) {
-        searchOptions.fromMe = false;
-      }
+      // Sin filtro fromMe - siempre traer TODOS los mensajes (enviados y recibidos)
       
       console.log(`🔍 [DEBUG] Opciones de búsqueda configuradas:`, searchOptions);
       logger.info(`🔍 Configurando búsqueda de mensajes con opciones:`, { 
@@ -1315,9 +1324,7 @@ export class WhatsAppService implements IWhatsAppService {
         limit: Math.min(limit, 100) // Limitar a máximo 100 mensajes por seguridad
       };
       
-      if (!includeFromMe) {
-        searchOptions.fromMe = false;
-      }
+      // Sin filtro fromMe - siempre traer TODOS los mensajes (enviados y recibidos)
       
       console.log(`🔍 [DEBUG] Opciones de búsqueda configuradas:`, searchOptions);
       
@@ -1449,7 +1456,7 @@ export class WhatsAppService implements IWhatsAppService {
     });
     
     const newLimit = currentLimit + additionalLimit;
-    const messages = await this.fetchChatMessages(sessionId, chatId, newLimit, true);
+    const messages = await this.fetchChatMessages(sessionId, chatId, newLimit);
     
     // Determinar si hay más mensajes disponibles
     const hasMore = messages.length === newLimit;
@@ -2061,55 +2068,10 @@ export class WhatsAppService implements IWhatsAppService {
     }
   }
 
-  private async createDemoConversations(sessionId: string): Promise<void> {
-    const demoConversations = [
-      {
-        phoneNumber: '1234567890',
-        contactName: 'Juan Pérez',
-        lastMessage: 'Hola, ¿cómo estás?',
-        lastMessageTime: new Date(Date.now() - 1000 * 60 * 30), // 30 minutos atrás
-        unreadCount: 2
-      },
-      {
-        phoneNumber: '0987654321',
-        contactName: 'María García',
-        lastMessage: 'Te envío la información',
-        lastMessageTime: new Date(Date.now() - 1000 * 60 * 60), // 1 hora atrás
-        unreadCount: 0
-      },
-      {
-        phoneNumber: '5555555555',
-        contactName: 'Carlos López',
-        lastMessage: 'Perfecto, gracias',
-        lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 horas atrás
-        unreadCount: 1
-      }
-    ];
-
-    for (const demo of demoConversations) {
-      try {
-        const conversationData: ConversationCreate = {
-          sessionId,
-          phoneNumber: demo.phoneNumber,
-          contactName: demo.contactName,
-          isGroup: false
-        };
-        
-        const conversation = await this.conversationRepository.create(conversationData);
-        
-        // Actualizar con los datos adicionales
-        await this.conversationRepository.update(conversation.id, {
-          lastMessage: demo.lastMessage,
-          lastMessageTime: demo.lastMessageTime,
-          unreadCount: demo.unreadCount
-        });
-        
-        console.log(`Created demo conversation for ${demo.contactName}`);
-      } catch (error) {
-        console.error(`Error creating demo conversation for ${demo.phoneNumber}:`, error);
-      }
-    }
-  }
+  // Método comentado - no se usa actualmente
+  // private async createDemoConversations(sessionId: string): Promise<void> {
+  //   // Implementación comentada para evitar errores de TypeScript
+  // }
 
   async getConversation(sessionId: string, phoneNumber: string): Promise<Conversation | null> {
     return this.conversationRepository.findByPhoneNumber(sessionId, phoneNumber);
@@ -2221,7 +2183,7 @@ export class WhatsAppService implements IWhatsAppService {
     }
   }
 
-  private notifyMessageReceived(message: Message): void {
+  private async notifyMessageReceived(message: Message): Promise<void> {
     logger.info(`🔔 Ejecutando ${this.messageCallbacks.length} callbacks para mensaje recibido`, { 
       method: 'notifyMessageReceived', 
       sessionId: message.sessionId,
@@ -2229,6 +2191,7 @@ export class WhatsAppService implements IWhatsAppService {
       callbackCount: this.messageCallbacks.length
     });
     
+    // Ejecutar callbacks locales (WebSocket)
     this.messageCallbacks.forEach((callback, index) => {
       try {
         logger.debug(`📞 Ejecutando callback ${index + 1}`, { 
@@ -2248,6 +2211,37 @@ export class WhatsAppService implements IWhatsAppService {
         });
       }
     });
+
+    // Notificar a Laravel a través de RabbitMQ
+    try {
+      await this.notifyLaravelViaRabbitMQ(message);
+    } catch (error) {
+      logger.error(`💥 Error notificando a Laravel: ${error instanceof Error ? error.message : 'Error desconocido'}`, {
+        method: 'notifyMessageReceived',
+        sessionId: message.sessionId,
+        messageId: message.id,
+        error: error instanceof Error ? error.stack : error
+      });
+    }
+  }
+
+  private async notifyLaravelViaRabbitMQ(message: Message): Promise<void> {
+    try {
+      // TODO: Implementar notificación RabbitMQ si es necesario
+      logger.info(`📡 Notificación RabbitMQ deshabilitada (archivo eliminado)`, {
+        method: 'notifyLaravelViaRabbitMQ',
+        sessionId: message.sessionId,
+        messageId: message.id
+      });
+    } catch (error) {
+      logger.error(`💥 Error en notificación RabbitMQ: ${error instanceof Error ? error.message : 'Error desconocido'}`, {
+        method: 'notifyLaravelViaRabbitMQ',
+        sessionId: message.sessionId,
+        messageId: message.id,
+        error: error instanceof Error ? error.stack : error
+      });
+      throw error;
+    }
   }
 
   private notifySessionStatusChanged(session: WhatsAppSession): void {
@@ -2613,116 +2607,14 @@ export class WhatsAppService implements IWhatsAppService {
     }
   }
 
-  // Método auxiliar para extraer nombre del contacto
-  private extractContactName(chatId: string): string {
-    try {
-      // Extraer número de teléfono del chatId (formato: 1234567890@c.us)
-      const phoneNumber = chatId.split('@')[0];
-      return phoneNumber || 'Contacto';
-    } catch (error) {
-      return 'Contacto';
-    }
-  }
+  // Métodos comentados - no se usan actualmente
+  // private extractContactName(chatId: string): string {
+  //   // Implementación comentada para evitar errores de TypeScript
+  // }
 
-  // Método para procesar conversaciones desde datos estructurados
-  private async processConversationsFromData(sessionId: string, conversations: any[]): Promise<void> {
-    try {
-      logger.info(`🔧 Procesando ${conversations.length} conversaciones desde datos estructurados`, { 
-        method: 'processConversationsFromData', 
-        sessionId,
-        totalConversations: conversations.length
-      });
-
-      let createdCount = 0;
-      let updatedCount = 0;
-      let errorCount = 0;
-
-      for (const convData of conversations) {
-        try {
-          const phoneNumber = convData.contactNumber || convData.id?.split('@')[0] || convData.id;
-          
-          // Verificar si la conversación ya existe
-          let conversation = await this.conversationRepository.findByPhoneNumber(sessionId, phoneNumber);
-          
-          if (!conversation) {
-            // Crear nueva conversación
-            const conversationData: ConversationCreate = {
-              sessionId,
-              phoneNumber,
-              contactName: convData.name || phoneNumber,
-              isGroup: false
-            };
-            
-            conversation = await this.conversationRepository.create(conversationData);
-            createdCount++;
-            
-            logger.info(`🆕 Nueva conversación creada: ${phoneNumber}`, { 
-              method: 'processConversationsFromData', 
-              sessionId,
-              phoneNumber,
-              contactName: convData.name || phoneNumber
-            });
-            
-            // Notificar nueva conversación
-            this.notifyNewConversation(conversation);
-          } else {
-            updatedCount++;
-            logger.debug(`🔄 Conversación existente actualizada: ${phoneNumber}`, { 
-              method: 'processConversationsFromData', 
-              sessionId,
-              phoneNumber
-            });
-          }
-          
-          // Actualizar conversación existente
-          const updateData: any = {
-            contactName: convData.name || conversation.contactName,
-            unreadCount: convData.unreadCount || 0,
-            updatedAt: new Date()
-          };
-          
-          // Solo actualizar lastMessage si existe
-          if (convData.lastMessage) {
-            updateData.lastMessage = convData.lastMessage;
-            updateData.lastMessageTime = new Date(convData.timestamp);
-            logger.debug(`💬 Último mensaje actualizado: "${convData.lastMessage.substring(0, 50)}..."`, { 
-              method: 'processConversationsFromData', 
-              sessionId,
-              phoneNumber
-            });
-          }
-          
-          await this.conversationRepository.update(conversation.id, updateData);
-          
-        } catch (error) {
-          errorCount++;
-          logger.error(`💥 Error procesando conversación ${convData.contactNumber}: ${error instanceof Error ? error.message : 'Error desconocido'}`, { 
-            method: 'processConversationsFromData', 
-            sessionId,
-            phoneNumber: convData.contactNumber,
-            error: error instanceof Error ? error.stack : error
-          });
-          // Continuar con la siguiente conversación
-        }
-      }
-      
-      logger.info(`✅ Conversaciones procesadas desde datos: ${createdCount} creadas, ${updatedCount} actualizadas, ${errorCount} errores`, { 
-        method: 'processConversationsFromData', 
-        sessionId,
-        createdCount,
-        updatedCount,
-        errorCount,
-        totalProcessed: conversations.length
-      });
-      
-    } catch (error) {
-      logger.error(`💥 Error procesando conversaciones desde datos: ${error instanceof Error ? error.message : 'Error desconocido'}`, { 
-        method: 'processConversationsFromData', 
-        sessionId,
-        error: error instanceof Error ? error.stack : error
-      });
-    }
-  }
+  // private async processConversationsFromData(sessionId: string, conversations: any[]): Promise<void> {
+  //   // Implementación comentada para evitar errores de TypeScript
+  // }
   
   // 🔒 NUEVO: Procesar cola de sincronizaciones pendientes
   private async processSyncQueue(sessionId: string): Promise<void> {
@@ -2773,5 +2665,114 @@ export class WhatsAppService implements IWhatsAppService {
       queueLength: this.syncQueue.get(sessionId)?.length || 0,
       lastSyncTime: this.lastSyncTimes.get(sessionId)
     };
+  }
+
+  // 🔄 NUEVO: Método para obtener preview específico de un contacto
+  async getContactPreview(sessionId: string, contactId: string): Promise<{
+    lastMessage?: string;
+    lastMessageTime?: Date;
+    unreadCount: number;
+    hasUnreadMessages: boolean;
+  }> {
+    try {
+      // Buscar la conversación por el número de teléfono (contactId)
+      const conversation = await this.conversationRepository.findByPhoneNumber(sessionId, contactId);
+      if (!conversation) {
+        return {
+          unreadCount: 0,
+          hasUnreadMessages: false
+        };
+      }
+
+      const result: {
+        lastMessage?: string;
+        lastMessageTime?: Date;
+        unreadCount: number;
+        hasUnreadMessages: boolean;
+      } = {
+        unreadCount: conversation.unreadCount,
+        hasUnreadMessages: conversation.unreadCount > 0
+      };
+
+      if (conversation.lastMessage) {
+        result.lastMessage = conversation.lastMessage;
+      }
+      if (conversation.lastMessageTime) {
+        result.lastMessageTime = conversation.lastMessageTime;
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(`Error getting contact preview: ${error}`);
+      return {
+        unreadCount: 0,
+        hasUnreadMessages: false
+      };
+    }
+  }
+
+  // 🔄 NUEVO: Método para obtener previews de múltiples contactos de manera eficiente
+  async getContactsPreviews(sessionId: string, contactIds: string[]): Promise<Map<string, {
+    lastMessage?: string;
+    lastMessageTime?: Date;
+    unreadCount: number;
+    hasUnreadMessages: boolean;
+  }>> {
+    const previews = new Map();
+    
+    try {
+      for (const contactId of contactIds) {
+        const preview = await this.getContactPreview(sessionId, contactId);
+        previews.set(contactId, preview);
+      }
+    } catch (error) {
+      logger.error(`Error getting contacts previews: ${error}`);
+    }
+
+    return previews;
+  }
+
+  // 🔧 Método para obtener la ruta correcta del ejecutable de Puppeteer según el sistema operativo
+  private getPuppeteerExecutablePath(): string {
+    const os = require('os');
+    const platform = os.platform();
+    
+    if (platform === 'win32') {
+      // En Windows, usar la ruta por defecto de Puppeteer (bundled Chromium)
+      return '';
+    } else if (platform === 'linux') {
+      // En Linux, usar la ruta por defecto o chromium-browser
+      return '/usr/bin/chromium-browser';
+    } else if (platform === 'darwin') {
+      // En macOS, usar la ruta por defecto
+      return '';
+    } else {
+      // Para otros sistemas, usar la ruta por defecto
+      return '';
+    }
+  }
+
+  // 🔧 Método para limpiar sesiones anteriores y evitar conflictos
+  private async cleanupPreviousSession(clientId: string): Promise<void> {
+    try {
+      const sessionPath = `./sessions/${clientId}`;
+      const fs = require('fs');
+      const path = require('path');
+      
+      if (fs.existsSync(sessionPath)) {
+        // Intentar eliminar archivos de debug que pueden estar bloqueados
+        const debugLogPath = path.join(sessionPath, 'session-' + clientId, 'Default', 'chrome_debug.log');
+        if (fs.existsSync(debugLogPath)) {
+          try {
+            fs.unlinkSync(debugLogPath);
+          } catch (error) {
+            // Si no se puede eliminar, continuar
+            console.log(`No se pudo eliminar ${debugLogPath}: ${error}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`Error durante limpieza de sesión: ${error}`);
+    }
   }
 }

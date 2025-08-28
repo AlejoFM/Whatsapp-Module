@@ -84,7 +84,7 @@ export class WhatsAppController {
     }
   }
 
-  async getAllSessions(req: Request, res: Response): Promise<void> {
+  async getAllSessions(_req: Request, res: Response): Promise<void> {
     try {
       const sessions = await this.whatsAppService.getAllSessions();
       ApiResponse.success(res, 'All sessions retrieved successfully', sessions);
@@ -193,7 +193,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🔄 NUEVO: Obtener contactos de WhatsApp
   async getContacts(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId } = req.params;
@@ -243,66 +242,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🔄 NUEVO: Obtener conversaciones de contactos (prioridad alta)
-  async getContactConversations(req: Request, res: Response): Promise<void> {
-    const startTime = Date.now();
-    const { sessionId } = req.params;
-    const { limit = 100, offset = 0 } = req.query;
-
-    logger.info(`👥 GET /conversations/contacts - Iniciando solicitud de conversaciones de contactos`, { 
-      method: 'WhatsAppController.getContactConversations', 
-      sessionId,
-      limit: Number(limit),
-      offset: Number(offset),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
-    });
-
-    try {
-      if (!sessionId) {
-        logger.warn(`⚠️ GET /conversations/contacts - Session ID requerido`, { 
-          method: 'WhatsAppController.getContactConversations', 
-          sessionId: 'undefined'
-        });
-        ApiResponse.badRequest(res, 'Session ID is required');
-        return;
-      }
-
-      logger.info(`🔍 GET /conversations/contacts - Obteniendo conversaciones de contactos`, { 
-        method: 'WhatsAppController.getContactConversations', 
-        sessionId 
-      });
-
-      const conversations = await this.whatsAppService.getContactConversations(
-        sessionId, 
-        Number(limit), 
-        Number(offset)
-      );
-
-      const duration = Date.now() - startTime;
-      logger.info(`✅ GET /conversations/contacts - Conversaciones de contactos obtenidas exitosamente`, { 
-        method: 'WhatsAppController.getContactConversations', 
-        sessionId,
-        duration,
-        conversationsCount: conversations.length,
-        limit: Number(limit),
-        offset: Number(offset)
-      });
-
-      ApiResponse.success(res, 'Contact conversations retrieved successfully', conversations);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.error(`💥 GET /conversations/contacts - Error obteniendo conversaciones de contactos: ${error instanceof Error ? error.message : 'Error desconocido'}`, { 
-        method: 'WhatsAppController.getContactConversations', 
-        sessionId,
-        duration,
-        error: error instanceof Error ? error.stack : error
-      });
-      ApiResponse.internalServerError(res, 'Failed to get contact conversations');
-    }
-  }
-
-  // 🔄 NUEVO: Obtener conversaciones que no son contactos (prioridad baja)
   async getNonContactConversations(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId } = req.params;
@@ -361,7 +300,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🚀 NUEVO: Obtener chats de contactos en lotes (estrategia de carga progresiva)
   async getContactChatsBatch(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId } = req.params;
@@ -420,7 +358,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🚀 NUEVO: Obtener chats no contactos en lotes (estrategia de carga progresiva)
   async getNonContactChatsBatch(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId } = req.params;
@@ -479,7 +416,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🚀 NUEVO: Obtener mensajes de un chat específico
   async fetchChatMessages(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId, chatId } = req.params;
@@ -543,7 +479,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🚀 NUEVO: Obtener mensajes avanzados de un chat con filtros
   async fetchChatMessagesAdvanced(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId, chatId } = req.params;
@@ -647,7 +582,6 @@ export class WhatsAppController {
     }
   }
 
-  // 🚀 NUEVO: Cargar más mensajes bajo demanda
   async loadChatMessagesOnDemand(req: Request, res: Response): Promise<void> {
     const startTime = Date.now();
     const { sessionId, chatId } = req.params;

@@ -14,6 +14,7 @@ export class InMemoryConversationRepository implements IConversationRepository {
       lastMessageTime: now,
       unreadCount: 0,
       isGroup: data.isGroup || false,
+      isContact: false, // Por defecto no es contacto
       createdAt: now,
       updatedAt: now
     };
